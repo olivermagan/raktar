@@ -255,7 +255,7 @@ let sb=null,mode='local',filter='all',cart=[],scanTarget='find';
 const LS={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const opts=LS.get('raktar-opts',{beep:true});
 
-function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),2600)}
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),t.length>60?8000:2600)}
 function cfg(){return S.config.main||{}}
 function setSync(t){$('#sync').textContent=t}
 
@@ -436,7 +436,7 @@ async function trimPng(blob,sizes){const im=await loadImg(blob),w=im.naturalWidt
     const ox=o.getContext('2d');ox.imageSmoothingQuality='high';ox.drawImage(c,x0,y0,cw,ch,0,0,o.width,o.height);o.toBlob(b=>res({blob:b,data:o.toDataURL('image/png')}),'image/png')})))}
 let SAM=null;
 async function loadSam(msg){if(SAM)return SAM;msg('Kivágó modell betöltése…');
-  const TF=await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2');TF.env.allowLocalModels=false;
+  const TF=await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2');TF.env.allowLocalModels=false;try{TF.env.backends.onnx.wasm.numThreads=1;TF.env.backends.onnx.wasm.proxy=false}catch(e){}
   const pc=p=>{if(p.status==='progress'&&p.total&&p.file?.includes('onnx'))msg(`Kivágó modell letöltése (csak első alkalommal): ${Math.round(p.loaded/p.total*100)}%`)};
   const model=await TF.SamModel.from_pretrained('Xenova/slimsam-77-uniform',{dtype:'q8',progress_callback:pc});
   const proc=await TF.AutoProcessor.from_pretrained('Xenova/slimsam-77-uniform');
@@ -466,7 +466,7 @@ async function cutDecode(){const{TF,model,proc}=SAM;const rs=CUT.inputs.reshaped
   if(CUT.pts.length===1){const good=ok.filter(o=>o.s>=Math.max(...ok.map(q=>q.s))-.04);ok=good.length?good:ok;ok.sort((p,q)=>q.a-p.a)}else ok.sort((p,q)=>q.s-p.s);
   const bi=ok[0].j;
   const m=new Uint8Array(n);for(let i=0;i<n;i++)m[i]=dd[bi*n+i]?1:0;CUT.mask=m}
-async function cutRun(){if(CUT.busy)return;CUT.busy=true;cutMsg('Kivágás…');try{await cutDecode();cutDraw();cutMsg('Ha nem stimmel: koppints a termék kimaradt részére, vagy válts „− Háttér”-re és koppints arra, ami nem kell.')}catch(e){console.error(e);cutMsg('Hiba a kivágásnál: '+e.message)}CUT.busy=false}
+async function cutRun(){if(CUT.busy)return;CUT.busy=true;cutMsg('Kivágás…');try{crumb('kijelölés');await cutDecode();crumb(null);cutDraw();cutMsg('Ha nem stimmel: koppints a termék kimaradt részére, vagy válts „− Háttér”-re és koppints arra, ami nem kell.')}catch(e){console.error(e);cutMsg('Hiba a kivágásnál: '+e.message)}CUT.busy=false}
 function cutExport(){const w=CUT.w,h=CUT.h,c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.drawImage(CUT.base,0,0);
   const id=x.getImageData(0,0,w,h),d=id.data,m=CUT.mask,a=new Float32Array(w*h);
   for(let y=0;y<h;y++)for(let i=0;i<w;i++){let s=0,k=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const yy=y+dy,xx=i+dx;if(yy>=0&&yy<h&&xx>=0&&xx<w){s+=m[yy*w+xx];k++}}a[y*w+i]=s/k}
@@ -475,15 +475,13 @@ function cutExport(){const w=CUT.w,h=CUT.h,c=document.createElement('canvas');c.
 function openCutter(file){return new Promise(async resolve=>{
   CUT.done=resolve;CUT.pts=[];CUT.mask=null;CUT.mode=1;setCutMode(1);
   $('#cut').classList.add('on');document.body.style.overflow='hidden';
-  const im=await loadImg(file),k=Math.min(1,1280/Math.max(im.naturalWidth,im.naturalHeight));
-  CUT.w=Math.round(im.naturalWidth*k);CUT.h=Math.round(im.naturalHeight*k);
-  const b=document.createElement('canvas');b.width=CUT.w;b.height=CUT.h;b.getContext('2d').drawImage(im,0,0,CUT.w,CUT.h);CUT.base=b;
+  const b=file;CUT.w=b.width;CUT.h=b.height;CUT.base=b;
   const cv=$('#cutCv');cv.width=CUT.w;cv.height=CUT.h;cutDraw();
-  try{await loadSam(cutMsg);cutMsg('A termék keresése a képen…');
-    const{TF,model,proc}=SAM;const img=await TF.RawImage.fromCanvas(b);CUT.inputs=await proc(img);CUT.emb=await model.get_image_embeddings(CUT.inputs);
-    if(!$('#cut').classList.contains('on'))return;
-    CUT.pts=[{x:.5,y:.5,l:1}];await cutRun()}
-  catch(e){console.error(e);cutMsg('A kivágó modell nem töltődött be ('+e.message+'). Az „Eredeti kép” gombbal mentheted háttérrel.')}})}
+  try{crumb('modell betöltése');await loadSam(cutMsg);cutMsg('A termék keresése a képen…');
+    crumb('kép elemzése');const{TF,model,proc}=SAM;const img=await TF.RawImage.fromCanvas(b);CUT.inputs=await proc(img);CUT.emb=await model.get_image_embeddings(CUT.inputs);
+    if(!$('#cut').classList.contains('on')){crumb(null);return}
+    CUT.pts=[{x:.5,y:.5,l:1}];crumb('kijelölés');await cutRun();crumb(null)}
+  catch(e){crumb(null);console.error(e);cutMsg('A kivágó modell nem töltődött be ('+e.message+'). Az „Eredeti kép” gombbal mentheted háttérrel.')}})}
 function closeCutter(v){$('#cut').classList.remove('on');document.body.style.overflow=$('#sheet').classList.contains('on')?'hidden':'';const f=CUT.done;CUT.done=null;f&&f(v)}
 function setCutMode(l){CUT.mode=l;$('#cutAdd').classList.toggle('y',l===1);$('#cutSub').classList.toggle('y',l===0)}
 $('#cutAdd').onclick=()=>setCutMode(1);$('#cutSub').onclick=()=>setCutMode(0);
@@ -497,14 +495,25 @@ $('#cutOrig').onclick=()=>closeCutter('orig');
 $('#cutOk').onclick=async()=>{if(!CUT.mask){toast('Még nincs kijelölés');return}cutMsg('Mentés…');const png=await cutExport();const r=await trimPng(png,[1200,320]);closeCutter(r)};
 async function useImage(file){
   const msg=t=>{const m=$('#picMsg');if(m)m.textContent=t};
-  try{const quick=await shrink(file,320,.7);
-    const setOrig=async()=>{const big=await shrink(file,1200,.82);pendingImg={full:big.blob,small:quick.data};setPreview(quick.data)};
-    if(opts.bgRemove===false){await setOrig();msg('');return}
-    const r=await openCutter(file);
-    if(r==='orig'){await setOrig();msg('Eredeti kép (háttérrel)')}
+  try{msg('Kép betöltése…');const cv=await fileToCanvas(file,1024);
+    const quick=await canvasOut(cv,320,'image/jpeg',.7),big=await canvasOut(cv,1024,'image/jpeg',.85);
+    const setOrig=()=>{pendingImg={full:big.blob,small:quick.data};setPreview(quick.data)};
+    if(opts.bgRemove===false){setOrig();msg('');return}
+    msg('');const r=await openCutter(cv);
+    if(r==='orig'){setOrig();msg('Eredeti kép (háttérrel)')}
     else if(r){pendingImg={full:r[0].blob,small:r[1].data};setPreview(r[1].data);msg('Kész – háttér eltávolítva')}
     else msg('')
   }catch(err){console.error(err);toast('A képet nem sikerült beolvasni')}}
+/* nagy (48 MP) iPhone-fotók: egyszer, kicsiben dekódoljuk, hogy ne fogyjon el a memória */
+async function fileToCanvas(file,max){let src=null,w,h;
+  try{src=await createImageBitmap(file);w=src.width;h=src.height}catch(e){src=await loadImg(file);w=src.naturalWidth;h=src.naturalHeight}
+  const k=Math.min(1,max/Math.max(w,h)),c=document.createElement('canvas');c.width=Math.round(w*k);c.height=Math.round(h*k);
+  const x=c.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(src,0,0,c.width,c.height);
+  if(src.close)src.close();else src.src='';return c}
+function canvasOut(c,max,type,q){const k=Math.min(1,max/Math.max(c.width,c.height)),o=document.createElement('canvas');o.width=Math.round(c.width*k);o.height=Math.round(c.height*k);
+  const x=o.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(c,0,0,o.width,o.height);
+  return new Promise(r=>o.toBlob(b=>r({blob:b,data:o.toDataURL(type,q)}),type,q))}
+function crumb(s){if(s)LS.set('raktar-crumb',s);else{try{localStorage.removeItem('raktar-crumb')}catch(e){}}}
 function setPreview(src){const t=$('#pimg');if(t)t.innerHTML=`<img src="${src}" alt="">`}
 $('#pic').onchange=e=>{const file=e.target.files[0];e.target.value='';if(file)useImage(file)};
 
@@ -688,6 +697,7 @@ $('#expCsv').onclick=()=>{const cols=['name','barcode','sku','category','locatio
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='keszlet.csv';document.body.appendChild(a);a.click();a.remove()};
 
 cart=LS.get('raktar-cart',[]);
+{const c=LS.get('raktar-crumb',null);if(c){crumb(null);setTimeout(()=>toast('Az előző kivágás itt szakadt meg: '+c+'. Írd meg ezt nekem!'),800)}}
 route();startCloud();
 }
 </script>

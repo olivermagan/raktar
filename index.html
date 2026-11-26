@@ -124,8 +124,8 @@ label.f .inp{margin-top:4px;color:var(--ink)}
 #cut{position:fixed;inset:0;z-index:35;background:#000;color:#fff;display:none;flex-direction:column}
 #cut.on{display:flex}
 #cut .sc-top{position:static;background:none}
-.cut-stage{flex:1;min-height:0;display:grid;place-items:center;padding:4px}
-#cutCv{max-width:100%;max-height:100%;touch-action:manipulation;border-radius:8px}
+.cut-stage{flex:1;min-height:0;position:relative;margin:4px}
+#cutCv{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;touch-action:manipulation}
 .cut-bot{padding:10px 14px calc(14px + env(safe-area-inset-bottom));display:grid;gap:8px}
 .cut-bot .sc-msg{font-size:14px;font-weight:500;color:#ddd}
 .cut-bot .btn{flex:1;background:#0008;color:#fff;border-color:#fff6;min-height:48px}
@@ -455,12 +455,17 @@ async function cutDecode(){const{TF,model,proc}=SAM;const rs=CUT.inputs.reshaped
   const input_labels=new TF.Tensor('int64',CUT.pts.map(p=>BigInt(p.l)),[1,1,CUT.pts.length]);
   const out=await model({...CUT.emb,input_points,input_labels});
   const masks=await proc.post_process_masks(out.pred_masks,CUT.inputs.original_sizes,CUT.inputs.reshaped_input_sizes);
-  const sc=out.iou_scores.data;let bi=0;
-  if(CUT.pts.length===1){/* egy pontnál a legnagyobb, de még jó pontszámú maszk = az egész tárgy */let bestA=-1;const n=CUT.w*CUT.h,dd=masks[0].data;
-    for(let j=0;j<sc.length;j++){if(sc[j]<.8)continue;let a=0;for(let i=0;i<n;i++)if(dd[j*n+i])a++;if(a<n*.92&&a>bestA){bestA=a;bi=j}}
-    if(bestA<0)for(let j=1;j<sc.length;j++)if(sc[j]>sc[bi])bi=j}
-  else for(let j=1;j<sc.length;j++)if(sc[j]>sc[bi])bi=j;
-  const n=CUT.w*CUT.h,d=masks[0].data,m=new Uint8Array(n);for(let i=0;i<n;i++)m[i]=d[bi*n+i]?1:0;CUT.mask=m}
+  const sc=out.iou_scores.data,n=CUT.w*CUT.h,dd=masks[0].data,W=CUT.w,H=CUT.h;
+  /* a háttér-maszkokat kiszűrjük: túl nagy terület vagy sok képszélt érint */
+  const info=[];for(let j=0;j<sc.length;j++){let a=0;for(let i=0;i<n;i++)if(dd[j*n+i])a++;
+    let e=0;const edge=(f)=>{let c=0,t=0;f((i)=>{t++;if(dd[j*n+i])c++});return c/t>.25};
+    if(edge(cb=>{for(let x=0;x<W;x++)cb(x)}))e++;if(edge(cb=>{for(let x=0;x<W;x++)cb((H-1)*W+x)}))e++;
+    if(edge(cb=>{for(let y=0;y<H;y++)cb(y*W)}))e++;if(edge(cb=>{for(let y=0;y<H;y++)cb(y*W+W-1)}))e++;
+    info.push({j,s:sc[j],a:a/n,e})}
+  let ok=info.filter(o=>o.a<.85&&o.e<2&&o.a>.002);if(!ok.length)ok=info;
+  if(CUT.pts.length===1){const good=ok.filter(o=>o.s>=Math.max(...ok.map(q=>q.s))-.04);ok=good.length?good:ok;ok.sort((p,q)=>q.a-p.a)}else ok.sort((p,q)=>q.s-p.s);
+  const bi=ok[0].j;
+  const m=new Uint8Array(n);for(let i=0;i<n;i++)m[i]=dd[bi*n+i]?1:0;CUT.mask=m}
 async function cutRun(){if(CUT.busy)return;CUT.busy=true;cutMsg('Kivágás…');try{await cutDecode();cutDraw();cutMsg('Ha nem stimmel: koppints a termék kimaradt részére, vagy válts „− Háttér”-re és koppints arra, ami nem kell.')}catch(e){console.error(e);cutMsg('Hiba a kivágásnál: '+e.message)}CUT.busy=false}
 function cutExport(){const w=CUT.w,h=CUT.h,c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.drawImage(CUT.base,0,0);
   const id=x.getImageData(0,0,w,h),d=id.data,m=CUT.mask,a=new Float32Array(w*h);

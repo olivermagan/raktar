@@ -2,7 +2,7 @@
 <html lang="hu">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Raktár</title>
 <meta name="theme-color" content="#121212">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,6 +17,8 @@
 <style>
 :root{color-scheme:light dark;--bg:light-dark(#ffffff,#121212);--ink:light-dark(#121212,#f2f2f2);--mut:light-dark(#5d5d5d,#a9a9a9);--line:light-dark(#e3e3e3,#2c2c2c);--card:light-dark(#f6f6f4,#1c1c1c);--y:#ffd21f;--red:light-dark(#c62828,#ff6b6b);--grn:light-dark(#1b7f3b,#5fd38a)}
 *{box-sizing:border-box;min-width:0}
+html,body,button,a,input,select,textarea,label,.item{touch-action:manipulation}
+html,body{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Inter,system-ui,sans-serif;overflow-x:clip;padding-bottom:calc(96px + env(safe-area-inset-bottom))}
 h1,h2,h3{font-family:Archivo,Inter,sans-serif;margin:0;line-height:1.1}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -729,6 +731,9 @@ $('#expCsv').onclick=()=>{const cols=['name','barcode','sku','category','locatio
   const csv='﻿'+['Megnevezés;Vonalkód;Cikkszám;Kategória;Hely;Készlet;Egység;Min;Nettó ár;Beszerzési ár;ÁFA;Súly kg;H cm;Sz cm;M cm;Liter',...prods().map(p=>cols.map(k=>'"'+String(p[k]??'').replace(/"/g,'""')+'"').join(';'))].join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='keszlet.csv';document.body.appendChild(a);a.click();a.remove()};
 
+/* nagyítás tiltása (iOS: dupla koppintás és két ujjas nagyítás) */
+for(const ev of ['gesturestart','gesturechange','gestureend'])document.addEventListener(ev,e=>e.preventDefault(),{passive:false});
+document.addEventListener('touchmove',e=>{if(e.touches.length>1)e.preventDefault()},{passive:false});
 cart=LS.get('raktar-cart',[]);
 {const c=LS.get('raktar-crumb',null);if(c){crumb(null);const eng=String(c).split('|')[1];if(eng){const i=ENGINES.indexOf(eng);if(i>=0&&i<ENGINES.length-1)LS.set('raktar-engine',ENGINES[i+1])}setTimeout(()=>toast('Az előző kivágás megszakadt ('+String(c).split('|')[0]+'). Legközelebb egy kíméletesebb módszerrel próbálom.'),800)}}
 route();startCloud();

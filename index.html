@@ -125,7 +125,7 @@ label.f .inp{margin-top:4px;color:var(--ink)}
 #cut.on{display:flex}
 #cut .sc-top{position:static;background:none}
 .cut-stage{flex:1;min-height:0;position:relative;margin:4px}
-#cutCv{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;touch-action:manipulation}
+#cutCv{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;touch-action:none}
 .cut-bot{padding:10px 14px calc(14px + env(safe-area-inset-bottom));display:grid;gap:8px}
 .cut-bot .sc-msg{font-size:14px;font-weight:500;color:#ddd}
 .cut-bot .btn{flex:1;background:#0008;color:#fff;border-color:#fff6;min-height:48px}
@@ -231,8 +231,8 @@ label.f .inp{margin-top:4px;color:var(--ink)}
   <div class="sc-top"><b>Koppints a termékre</b><button class="sc-btn" id="cutClose" aria-label="Bezár">×</button></div>
   <div class="cut-stage"><canvas id="cutCv"></canvas></div>
   <div class="cut-bot"><div class="sc-msg" id="cutMsg"></div>
-    <div class="sc-row"><button class="btn y" id="cutAdd">+ Termék</button><button class="btn" id="cutSub">− Háttér</button><button class="btn" id="cutUndo">Vissza</button></div>
-    <div class="sc-row"><button class="btn" id="cutOrig">Eredeti kép</button><button class="btn y" id="cutOk">Kész</button></div></div>
+    <div class="sc-row"><button class="btn y" id="cutAdd">+ Termék</button><button class="btn" id="cutSub">− Háttér</button><button class="btn" id="cutErase">Radír</button><button class="btn" id="cutPaint">Ecset</button></div>
+    <div class="sc-row"><button class="btn" id="cutUndo">Vissza</button><button class="btn" id="cutOrig">Eredeti</button><button class="btn y" id="cutOk">Kész</button></div></div>
 </div>
 
 <input type="file" id="cam" accept="image/*" capture="environment" hidden>
@@ -434,14 +434,18 @@ async function trimPng(blob,sizes){const im=await loadImg(blob),w=im.naturalWidt
   const cw=x1-x0+1,ch=y1-y0+1;
   return Promise.all(sizes.map(max=>new Promise(res=>{const k=Math.min(1,max/Math.max(cw,ch)),o=document.createElement('canvas');o.width=Math.round(cw*k);o.height=Math.round(ch*k);
     const ox=o.getContext('2d');ox.imageSmoothingQuality='high';ox.drawImage(c,x0,y0,cw,ch,0,0,o.width,o.height);o.toBlob(b=>res({blob:b,data:o.toDataURL('image/png')}),'image/png')})))}
-let SAM=null;
+/* motorok: SAM a grafikus chipen (WebGPU) → tartalék: ISNet + radír/ecset. Ha egy motor összeomlik, a következő indításkor a következőt használjuk. */
+const ENGINES=[navigator.gpu?'sam-gpu':null,'isnet'].filter(Boolean);
+function curEngine(){const e=LS.get('raktar-engine',null);return ENGINES.includes(e)?e:ENGINES[0]}
+let SAM=null,ISNET=null;
 async function loadSam(msg){if(SAM)return SAM;msg('Kivágó modell betöltése…');
-  const TF=await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2');TF.env.allowLocalModels=false;try{TF.env.backends.onnx.wasm.numThreads=1;TF.env.backends.onnx.wasm.proxy=false}catch(e){}
+  const TF=await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2');TF.env.allowLocalModels=false;
   const pc=p=>{if(p.status==='progress'&&p.total&&p.file?.includes('onnx'))msg(`Kivágó modell letöltése (csak első alkalommal): ${Math.round(p.loaded/p.total*100)}%`)};
-  const model=await TF.SamModel.from_pretrained('Xenova/slimsam-77-uniform',{dtype:'q8',progress_callback:pc});
+  const model=await TF.SamModel.from_pretrained('Xenova/slimsam-77-uniform',{device:'webgpu',dtype:'fp16',progress_callback:pc});
   const proc=await TF.AutoProcessor.from_pretrained('Xenova/slimsam-77-uniform');
   SAM={TF,model,proc};return SAM}
-const CUT={cv:null,w:0,h:0,base:null,inputs:null,emb:null,pts:[],mask:null,mode:1,busy:false,done:null};
+async function loadIsnet(msg){if(ISNET)return ISNET;msg('Háttér-eltávolító betöltése…');ISNET=await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm');return ISNET}
+const CUT={w:0,h:0,base:null,inputs:null,emb:null,pts:[],mask:null,mode:1,busy:false,done:null,engine:'',hist:[]};
 function cutMsg(t){$('#cutMsg').textContent=t}
 function cutDraw(){const cv=$('#cutCv'),x=cv.getContext('2d');x.drawImage(CUT.base,0,0);
   if(CUT.mask){const id=x.getImageData(0,0,CUT.w,CUT.h),d=id.data,m=CUT.mask,w=CUT.w;
@@ -449,6 +453,13 @@ function cutDraw(){const cv=$('#cutCv'),x=cv.getContext('2d');x.drawImage(CUT.ba
       else{const xx=i%w;if((xx>0&&!m[i-1])||(xx<w-1&&!m[i+1])||(i>=w&&!m[i-w])||(i+w<m.length&&!m[i+w])){const k=i*4;d[k]=255;d[k+1]=210;d[k+2]=31}}}
     x.putImageData(id,0,0)}
   const r=Math.max(6,CUT.w/90);for(const p of CUT.pts){x.beginPath();x.arc(p.x*CUT.w,p.y*CUT.h,r,0,7);x.fillStyle=p.l?'#21c55d':'#ef4444';x.fill();x.lineWidth=r/3;x.strokeStyle='#fff';x.stroke()}}
+function largestAt(m,w,h,cx,cy){/* csak a középen lévő (vagy a legnagyobb) összefüggő folt marad */
+  const N=w*h,lab=new Int32Array(N),q=new Int32Array(N);let id=0,best=0,bestN=0,centerId=0;const c0=Math.round(cy*h)*w+Math.round(cx*w);
+  for(let s=0;s<N;s++){if(!m[s]||lab[s])continue;id++;let qh=0,qt=0;q[qt++]=s;lab[s]=id;
+    while(qh<qt){const p=q[qh++],x=p%w;if(x>0&&m[p-1]&&!lab[p-1]){lab[p-1]=id;q[qt++]=p-1}if(x<w-1&&m[p+1]&&!lab[p+1]){lab[p+1]=id;q[qt++]=p+1}
+      if(p>=w&&m[p-w]&&!lab[p-w]){lab[p-w]=id;q[qt++]=p-w}if(p+w<N&&m[p+w]&&!lab[p+w]){lab[p+w]=id;q[qt++]=p+w}}
+    if(qt>bestN){bestN=qt;best=id}}
+  centerId=lab[c0]||best;const out=new Uint8Array(N);for(let i=0;i<N;i++)out[i]=lab[i]===centerId?1:0;return out}
 async function cutDecode(){const{TF,model,proc}=SAM;const rs=CUT.inputs.reshaped_input_sizes[0];
   const pts=CUT.pts.flatMap(p=>[p.x*rs[1],p.y*rs[0]]);
   const input_points=new TF.Tensor('float32',pts,[1,1,CUT.pts.length,2]);
@@ -456,7 +467,6 @@ async function cutDecode(){const{TF,model,proc}=SAM;const rs=CUT.inputs.reshaped
   const out=await model({...CUT.emb,input_points,input_labels});
   const masks=await proc.post_process_masks(out.pred_masks,CUT.inputs.original_sizes,CUT.inputs.reshaped_input_sizes);
   const sc=out.iou_scores.data,n=CUT.w*CUT.h,dd=masks[0].data,W=CUT.w,H=CUT.h;
-  /* a háttér-maszkokat kiszűrjük: túl nagy terület vagy sok képszélt érint */
   const info=[];for(let j=0;j<sc.length;j++){let a=0;for(let i=0;i<n;i++)if(dd[j*n+i])a++;
     let e=0;const edge=(f)=>{let c=0,t=0;f((i)=>{t++;if(dd[j*n+i])c++});return c/t>.25};
     if(edge(cb=>{for(let x=0;x<W;x++)cb(x)}))e++;if(edge(cb=>{for(let x=0;x<W;x++)cb((H-1)*W+x)}))e++;
@@ -464,32 +474,54 @@ async function cutDecode(){const{TF,model,proc}=SAM;const rs=CUT.inputs.reshaped
     info.push({j,s:sc[j],a:a/n,e})}
   let ok=info.filter(o=>o.a<.85&&o.e<2&&o.a>.002);if(!ok.length)ok=info;
   if(CUT.pts.length===1){const good=ok.filter(o=>o.s>=Math.max(...ok.map(q=>q.s))-.04);ok=good.length?good:ok;ok.sort((p,q)=>q.a-p.a)}else ok.sort((p,q)=>q.s-p.s);
-  const bi=ok[0].j;
-  const m=new Uint8Array(n);for(let i=0;i<n;i++)m[i]=dd[bi*n+i]?1:0;CUT.mask=m}
-async function cutRun(){if(CUT.busy)return;CUT.busy=true;cutMsg('Kivágás…');try{crumb('kijelölés');await cutDecode();crumb(null);cutDraw();cutMsg('Ha nem stimmel: koppints a termék kimaradt részére, vagy válts „− Háttér”-re és koppints arra, ami nem kell.')}catch(e){console.error(e);cutMsg('Hiba a kivágásnál: '+e.message)}CUT.busy=false}
+  const bi=ok[0].j;const m=new Uint8Array(n);for(let i=0;i<n;i++)m[i]=dd[bi*n+i]?1:0;CUT.mask=m}
+const HELP_SAM='Koppints a termék kimaradt részére (+ Termék), vagy arra, ami nem kell (− Háttér). Finomhangolás: Radír / Ecset.';
+const HELP_ISNET='A Radírral húzd át, ami nem kell (pl. kéz), az Ecsettel azt, ami lemaradt a termékről.';
+async function cutRun(){if(CUT.busy)return;CUT.busy=true;cutMsg('Kivágás…');try{crumb('kijelölés|'+CUT.engine);await cutDecode();crumb(null);cutDraw();cutMsg(HELP_SAM)}catch(e){crumb(null);console.error(e);cutMsg('Hiba a kivágásnál: '+e.message)}CUT.busy=false}
+function pushHist(){CUT.hist.push({pts:CUT.pts.slice(),mask:CUT.mask?CUT.mask.slice():null});if(CUT.hist.length>15)CUT.hist.shift()}
 function cutExport(){const w=CUT.w,h=CUT.h,c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.drawImage(CUT.base,0,0);
-  const id=x.getImageData(0,0,w,h),d=id.data,m=CUT.mask,a=new Float32Array(w*h);
-  for(let y=0;y<h;y++)for(let i=0;i<w;i++){let s=0,k=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const yy=y+dy,xx=i+dx;if(yy>=0&&yy<h&&xx>=0&&xx<w){s+=m[yy*w+xx];k++}}a[y*w+i]=s/k}
-  for(let i=0;i<w*h;i++)d[i*4+3]=Math.round(a[i]*255);x.putImageData(id,0,0);
-  return new Promise(r=>c.toBlob(r,'image/png'))}
-function openCutter(file){return new Promise(async resolve=>{
-  CUT.done=resolve;CUT.pts=[];CUT.mask=null;CUT.mode=1;setCutMode(1);
+  const id=x.getImageData(0,0,w,h),d=id.data,m=CUT.mask;
+  for(let y=0;y<h;y++)for(let i=0;i<w;i++){let s=0,k=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const yy=y+dy,xx=i+dx;if(yy>=0&&yy<h&&xx>=0&&xx<w){s+=m[yy*w+xx];k++}}d[(y*w+i)*4+3]=Math.round(s/k*255)}
+  x.putImageData(id,0,0);return new Promise(r=>c.toBlob(r,'image/png'))}
+async function runIsnet(b){const lib=await loadIsnet(cutMsg);cutMsg('Háttér eltávolítása…');
+  const blob=await new Promise(r=>b.toBlob(r,'image/jpeg',.92));
+  const out=await lib.removeBackground(blob,{model:'isnet_fp16',output:{format:'image/png'},progress:(k,cur,tot)=>{if(k.startsWith('fetch')&&tot)cutMsg(`Modell letöltése (első alkalom): ${Math.round(cur/tot*100)}%`)}});
+  const im=await loadImg(out),c=document.createElement('canvas');c.width=CUT.w;c.height=CUT.h;const x=c.getContext('2d');x.drawImage(im,0,0,CUT.w,CUT.h);
+  const d=x.getImageData(0,0,CUT.w,CUT.h).data,m=new Uint8Array(CUT.w*CUT.h);for(let i=0;i<m.length;i++)m[i]=d[i*4+3]>128?1:0;
+  CUT.mask=largestAt(m,CUT.w,CUT.h,.5,.5)}
+function openCutter(cv0){return new Promise(async resolve=>{
+  CUT.done=resolve;CUT.pts=[];CUT.mask=null;CUT.hist=[];CUT.emb=null;CUT.engine=curEngine();
+  $('#cutAdd').hidden=$('#cutSub').hidden=CUT.engine!=='sam-gpu';setCutMode(CUT.engine==='sam-gpu'?1:'erase');
   $('#cut').classList.add('on');document.body.style.overflow='hidden';
-  const b=file;CUT.w=b.width;CUT.h=b.height;CUT.base=b;
+  const b=cv0;CUT.w=b.width;CUT.h=b.height;CUT.base=b;
   const cv=$('#cutCv');cv.width=CUT.w;cv.height=CUT.h;cutDraw();
-  try{crumb('modell betöltése');await loadSam(cutMsg);cutMsg('A termék keresése a képen…');
-    crumb('kép elemzése');const{TF,model,proc}=SAM;const img=await TF.RawImage.fromCanvas(b);CUT.inputs=await proc(img);CUT.emb=await model.get_image_embeddings(CUT.inputs);
-    if(!$('#cut').classList.contains('on')){crumb(null);return}
-    CUT.pts=[{x:.5,y:.5,l:1}];crumb('kijelölés');await cutRun();crumb(null)}
-  catch(e){crumb(null);console.error(e);cutMsg('A kivágó modell nem töltődött be ('+e.message+'). Az „Eredeti kép” gombbal mentheted háttérrel.')}})}
+  try{if(CUT.engine==='sam-gpu'){crumb('modell betöltése|sam-gpu');await loadSam(cutMsg);cutMsg('A termék keresése a képen…');
+      crumb('kép elemzése|sam-gpu');const{TF,model,proc}=SAM;const img=await TF.RawImage.fromCanvas(b);CUT.inputs=await proc(img);CUT.emb=await model.get_image_embeddings(CUT.inputs);crumb(null);
+      if(!$('#cut').classList.contains('on'))return;CUT.pts=[{x:.5,y:.5,l:1}];await cutRun()}
+    else{crumb('kép elemzése|isnet');await runIsnet(b);crumb(null);cutDraw();cutMsg(HELP_ISNET)}}
+  catch(e){crumb(null);console.error(e);
+    if(CUT.engine==='sam-gpu'){LS.set('raktar-engine','isnet');CUT.engine='isnet';$('#cutAdd').hidden=$('#cutSub').hidden=true;setCutMode('erase');
+      try{await runIsnet(b);cutDraw();cutMsg(HELP_ISNET)}catch(e2){cutMsg('A kivágás nem sikerült. Az „Eredeti kép” gombbal mentheted háttérrel.')}}
+    else cutMsg('A kivágás nem sikerült ('+e.message+'). Az „Eredeti kép” gombbal mentheted háttérrel.')}})}
 function closeCutter(v){$('#cut').classList.remove('on');document.body.style.overflow=$('#sheet').classList.contains('on')?'hidden':'';const f=CUT.done;CUT.done=null;f&&f(v)}
-function setCutMode(l){CUT.mode=l;$('#cutAdd').classList.toggle('y',l===1);$('#cutSub').classList.toggle('y',l===0)}
+function setCutMode(l){CUT.mode=l;for(const[id,v]of[['cutAdd',1],['cutSub',0],['cutErase','erase'],['cutPaint','paint']])$('#'+id).classList.toggle('y',l===v)}
 $('#cutAdd').onclick=()=>setCutMode(1);$('#cutSub').onclick=()=>setCutMode(0);
-$('#cutUndo').onclick=()=>{if(CUT.pts.length>1){CUT.pts.pop();cutRun()}};
-$('#cutCv').addEventListener('click',e=>{if(!CUT.emb||CUT.busy)return;const r=e.target.getBoundingClientRect();
-  const s=Math.min(r.width/CUT.w,r.height/CUT.h),ox=(r.width-CUT.w*s)/2,oy=(r.height-CUT.h*s)/2;
-  const x=(e.clientX-r.left-ox)/s/CUT.w,y=(e.clientY-r.top-oy)/s/CUT.h;if(x<0||y<0||x>1||y>1)return;
-  CUT.pts.push({x,y,l:CUT.mode});cutRun()});
+$('#cutErase').onclick=()=>setCutMode('erase');$('#cutPaint').onclick=()=>setCutMode('paint');
+$('#cutUndo').onclick=()=>{const s=CUT.hist.pop();if(!s)return;CUT.pts=s.pts;CUT.mask=s.mask;cutDraw()};
+function cvPos(e){const r=$('#cutCv').getBoundingClientRect(),s=Math.min(r.width/CUT.w,r.height/CUT.h),ox=(r.width-CUT.w*s)/2,oy=(r.height-CUT.h*s)/2;
+  return{x:(e.clientX-r.left-ox)/s/CUT.w,y:(e.clientY-r.top-oy)/s/CUT.h,s}}
+let stroke=null,drawPending=false;
+function brush(p){const R=Math.max(4,Math.round(Math.max(CUT.w,CUT.h)*.025)),cx=Math.round(p.x*CUT.w),cy=Math.round(p.y*CUT.h),v=CUT.mode==='paint'?1:0;
+  const pts=stroke.last?[stroke.last,{cx,cy}]:[{cx,cy}];const a=pts[0],steps=Math.max(1,Math.ceil(Math.hypot(cx-a.cx,cy-a.cy)/(R/2)));
+  for(let s=0;s<=steps;s++){const X=Math.round(a.cx+(cx-a.cx)*s/steps),Y=Math.round(a.cy+(cy-a.cy)*s/steps);
+    for(let y=Math.max(0,Y-R);y<=Math.min(CUT.h-1,Y+R);y++)for(let x=Math.max(0,X-R);x<=Math.min(CUT.w-1,X+R);x++)if((x-X)**2+(y-Y)**2<=R*R)CUT.mask[y*CUT.w+x]=v}
+  stroke.last={cx,cy};if(!drawPending){drawPending=true;requestAnimationFrame(()=>{drawPending=false;cutDraw()})}}
+const cvEl=$('#cutCv');
+cvEl.addEventListener('pointerdown',e=>{if(!CUT.mask||CUT.busy)return;const p=cvPos(e);if(p.x<0||p.y<0||p.x>1||p.y>1)return;
+  if(CUT.mode==='erase'||CUT.mode==='paint'){e.preventDefault();cvEl.setPointerCapture(e.pointerId);pushHist();stroke={last:null};brush(p)}
+  else{if(!CUT.emb)return;pushHist();CUT.pts.push({x:p.x,y:p.y,l:CUT.mode});cutRun()}});
+cvEl.addEventListener('pointermove',e=>{if(!stroke)return;e.preventDefault();brush(cvPos(e))});
+const endStroke=()=>{stroke=null};cvEl.addEventListener('pointerup',endStroke);cvEl.addEventListener('pointercancel',endStroke);
 $('#cutClose').onclick=()=>closeCutter(null);
 $('#cutOrig').onclick=()=>closeCutter('orig');
 $('#cutOk').onclick=async()=>{if(!CUT.mask){toast('Még nincs kijelölés');return}cutMsg('Mentés…');const png=await cutExport();const r=await trimPng(png,[1200,320]);closeCutter(r)};
@@ -697,7 +729,7 @@ $('#expCsv').onclick=()=>{const cols=['name','barcode','sku','category','locatio
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='keszlet.csv';document.body.appendChild(a);a.click();a.remove()};
 
 cart=LS.get('raktar-cart',[]);
-{const c=LS.get('raktar-crumb',null);if(c){crumb(null);setTimeout(()=>toast('Az előző kivágás itt szakadt meg: '+c+'. Írd meg ezt nekem!'),800)}}
+{const c=LS.get('raktar-crumb',null);if(c){crumb(null);const eng=String(c).split('|')[1];if(eng){const i=ENGINES.indexOf(eng);if(i>=0&&i<ENGINES.length-1)LS.set('raktar-engine',ENGINES[i+1])}setTimeout(()=>toast('Az előző kivágás megszakadt ('+String(c).split('|')[0]+'). Legközelebb egy kíméletesebb módszerrel próbálom.'),800)}}
 route();startCloud();
 }
 </script>

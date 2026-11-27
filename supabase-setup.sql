@@ -96,8 +96,8 @@ create policy "admin torol"  on public.orders for delete to authenticated using 
 -- cégadatok: mindenki olvassa, csak admin írja
 create policy "tag olvas"    on public.config for select to authenticated using (public.is_member());
 create policy "admin ir"     on public.config for all    to authenticated using (public.is_admin()) with check (public.is_admin());
--- napló: tag olvas és ír (a trigger tölti a nevet), módosítás/törlés senkinek
-create policy "tag olvas"    on public.moves for select to authenticated using (public.is_member());
+-- napló: csak az admin olvassa; mindenki ír (a trigger tölti a nevet); módosítás/törlés senkinek
+create policy "admin olvas"  on public.moves for select to authenticated using (public.is_admin());
 create policy "tag ir"       on public.moves for insert to authenticated with check (public.is_member());
 
 -- Készlet atomi módosítása + naplózás egy lépésben
@@ -136,6 +136,68 @@ create policy "termekkep olvas"   on storage.objects for select using (bucket_id
 create policy "termekkep ir"      on storage.objects for insert to authenticated with check (bucket_id = 'termekkepek' and public.is_member());
 create policy "termekkep modosit" on storage.objects for update to authenticated using (bucket_id = 'termekkepek' and public.is_member());
 create policy "termekkep torol"   on storage.objects for delete to authenticated using (bucket_id = 'termekkepek' and public.is_admin());
+
+-- Vevői fiókok (3. verzió): vevő csak a saját adatait látja
+alter table public.members add column if not exists customer_id text;
+alter table public.members drop constraint if exists members_role_check;
+alter table public.members add constraint members_role_check check (role in ('admin','worker','customer'));
+create or replace function public.is_member()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.members where lower(email) = lower(auth.jwt() ->> 'email') and active and role in ('admin','worker'));
+$$;
+create or replace function public.is_customer()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.members where lower(email) = lower(auth.jwt() ->> 'email') and active and role = 'customer');
+$$;
+create or replace function public.my_customer()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('id', c.id, 'name', c.data ->> 'name', 'discount', coalesce(nullif(c.data ->> 'discount','')::numeric, 0),
+    'addr', c.data ->> 'addr', 'email', c.data ->> 'email', 'tax', c.data ->> 'tax')
+  from public.customers c join public.members m on m.customer_id = c.id
+  where lower(m.email) = lower(auth.jwt() ->> 'email') and m.active and m.role = 'customer' limit 1;
+$$;
+create or replace function public.my_orders()
+returns setof jsonb language sql stable security definer set search_path = public as $$
+  select o.data || jsonb_build_object('id', o.id) from public.orders o
+  where public.is_customer() and o.data -> 'customer' ->> 'id' = (select customer_id from public.members where lower(email) = lower(auth.jwt() ->> 'email') and active and role = 'customer' limit 1)
+  order by o.data ->> 'createdAt' desc;
+$$;
+create or replace function public.catalog()
+returns table(id text, name text, category text, unit text, price numeric, vat numeric, qty numeric, image text)
+language sql stable security definer set search_path = public as $$
+  select p.id, p.data ->> 'name', p.data ->> 'category', coalesce(nullif(p.data ->> 'unit',''), 'db'),
+    nullif(p.data ->> 'price','')::numeric, coalesce(nullif(p.data ->> 'vat','')::numeric, 27),
+    coalesce(nullif(p.data ->> 'qty','')::numeric, 0), coalesce(p.data ->> 'imageUrl', p.data ->> 'imageData')
+  from public.products p where public.is_member() or public.is_customer()
+  order by p.data ->> 'name';
+$$;
+revoke execute on function public.my_customer() from anon;
+revoke execute on function public.my_orders() from anon;
+revoke execute on function public.catalog() from anon;
+
+-- vevő e-mail címe = vevői belépés (automatikusan)
+create or replace function public.customer_sync_member()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare em text;
+begin
+  if tg_op = 'DELETE' then
+    delete from public.members where customer_id = old.id and role = 'customer';
+    return old;
+  end if;
+  em := lower(nullif(trim(new.data ->> 'email'), ''));
+  if em is null then
+    delete from public.members where customer_id = new.id and role = 'customer';
+    return new;
+  end if;
+  if exists (select 1 from public.members where lower(email) = em and role <> 'customer') then return new; end if;
+  delete from public.members where customer_id = new.id and role = 'customer' and lower(email) <> em;
+  insert into public.members (email, name, role, active, customer_id)
+  values (em, coalesce(new.data ->> 'name', ''), 'customer', true, new.id)
+  on conflict (email) do update set name = excluded.name, customer_id = excluded.customer_id where public.members.role = 'customer';
+  return new;
+end $$;
+drop trigger if exists customer_sync_member on public.customers;
+create trigger customer_sync_member after insert or update or delete on public.customers for each row execute function public.customer_sync_member();
 
 -- >>> ÍRD ÁT A SAJÁT E-MAIL CÍMEDRE ÉS NEVEDRE (te leszel az admin) <<<
 insert into public.members (email, name, role) values ('IDE_AZ_EMAIL_CIMED@pelda.hu', 'Saját Név', 'admin')

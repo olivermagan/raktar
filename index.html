@@ -140,6 +140,11 @@ label.f .inp{margin-top:4px;color:var(--ink)}
 .gbox h1{font-size:34px;margin-bottom:22px}.gbox h1 span{background:var(--y);color:#121212;padding:0 8px}
 .gbox h2{font-size:22px;margin-bottom:8px}
 body.worker .adm{display:none!important}
+body.cust .tabs,body.cust .toplink,body.cust .adm{display:none!important}
+body.cust{padding-bottom:24px}
+.pqr{display:grid;place-items:center;gap:10px;padding:18px;border:2px solid var(--ink);border-radius:16px;text-align:center;margin:12px 0}
+.pqr svg{width:min(70vw,280px);height:auto;background:#fff;border-radius:8px}
+.old{text-decoration:line-through;color:var(--mut);font-weight:400;margin-right:6px}
 .mv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:10px 0;border-bottom:1px solid var(--line)}
 .mv b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mv .d{font:800 18px Archivo,sans-serif;text-align:right;white-space:nowrap}
@@ -174,7 +179,7 @@ body.worker .adm{display:none!important}
 <header class="top">
   <h1><span>RAKTÁR</span></h1>
   <div class="sync" id="sync">Indítás…</div>
-  <a href="#naplo" class="toplink">Napló</a>
+  <a href="#naplo" class="toplink adm">Napló</a>
   <a href="#beallitas" class="toplink">Beállítások</a>
 </header>
 
@@ -216,6 +221,12 @@ body.worker .adm{display:none!important}
     <div class="row" style="justify-content:space-between"><h2 style="font-size:26px">Vevők</h2><button class="btn k" id="newC">+ Új vevő</button></div>
     <p class="note">A kedvezmény %-ot rendelésnél automatikusan levonja. Később ebből lesz a regisztrált viszonteladók jogosultsága.</p>
     <div class="list" id="clist"></div>
+  </section>
+
+  <section class="view" id="v-portal">
+    <div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 id="pName" style="font-size:26px"></h2><span class="note" id="pDisc"></span></div><button class="btn ghost" id="pOut">Kilépés</button></div>
+    <div class="chips" id="pTabs" style="margin:14px 0 6px"><button class="chip on" data-t="prod">Termékek</button><button class="chip" data-t="ord">Rendeléseim</button><button class="chip" data-t="qr">QR-kódom</button></div>
+    <div id="pBody"></div>
   </section>
 
   <section class="view" id="v-naplo">
@@ -388,6 +399,7 @@ async function loadCloud(session){
   const m=MEMBERS.find(x=>x.email.toLowerCase()===email);
   if(!m||!m.active){gateNoAccess(email);return}
   ME={email,name:m.name||email,role:m.role};
+  if(m.role==='customer'){await loadPortal();return}
   document.body.classList.toggle('worker',!isAdmin());
   try{for(const t of TABLES){const{data,error}=await sb.from(t).select('id,data').limit(10000);if(error)throw error;S[t]=Object.fromEntries(data.map(r=>[r.id,r.data]))}
     setSync(ME.name+(isAdmin()?' · admin':''))}
@@ -408,10 +420,12 @@ function renderMe(){const box=$('#meBox');if(!box||!ME)return;
   <div class="row"><button class="btn ghost" id="logout">Kijelentkezés</button></div>`;
   $('#logout').onclick=async()=>{await sb.auth.signOut();location.reload()}}
 function renderUsers(force){const box=$('#usersBox');if(!box||!isAdmin()||(!force&&box.contains(document.activeElement)))return;
-  box.innerHTML=`<div class="list">${MEMBERS.map(m=>`<div class="item" style="grid-template-columns:minmax(0,1fr) auto"><span><h3>${esc(m.name||m.email)}${m.active?'':' <span class="tag">letiltva</span>'}</h3><span class="meta">${esc(m.email)} · ${m.role==='admin'?'Admin':'Dolgozó'}</span></span>
+  const staff=MEMBERS.filter(m=>m.role!=='customer'),custs=MEMBERS.filter(m=>m.role==='customer');
+  box.innerHTML=`<div class="list">${staff.map(m=>`<div class="item" style="grid-template-columns:minmax(0,1fr) auto"><span><h3>${esc(m.name||m.email)}${m.active?'':' <span class="tag">letiltva</span>'}</h3><span class="meta">${esc(m.email)} · ${m.role==='admin'?'Admin':'Dolgozó'}</span></span>
     <span class="row" style="gap:6px">${m.email===ME.email?'<span class="note">te</span>':`<button class="btn ghost" data-ur="${esc(m.email)}" style="min-height:40px;padding:4px 10px">${m.role==='admin'?'→ Dolgozó':'→ Admin'}</button><button class="btn ${m.active?'red':'ghost'}" data-ua="${esc(m.email)}" style="min-height:40px;padding:4px 10px">${m.active?'Letilt':'Aktivál'}</button>`}</span></div>`).join('')}</div>
   <form id="addU" class="grid" style="margin-top:12px"><label class="f">Név<input class="inp" name="n" required></label><label class="f">E-mail<input class="inp" name="e" type="email" required></label>
-  <label class="f">Szerepkör<select class="inp" name="r"><option value="worker">Dolgozó</option><option value="admin">Admin</option></select></label><button class="btn k" style="align-self:end">+ Felhasználó</button></form>`;
+  <label class="f">Szerepkör<select class="inp" name="r"><option value="worker">Dolgozó</option><option value="admin">Admin</option></select></label><button class="btn k" style="align-self:end">+ Felhasználó</button></form>
+  ${custs.length?`<h3 style="margin:18px 0 6px">Vevői fiókok</h3><div class="list">${custs.map(m=>`<div class="item" style="grid-template-columns:minmax(0,1fr) auto"><span><h3>${esc(m.name)}${m.active?'':' <span class="tag">letiltva</span>'}</h3><span class="meta">${esc(m.email)} · vevő</span></span><span class="note">a vevő adatlapján kezelhető</span></div>`).join('')}</div>`:''}`;
   $('#addU').onsubmit=async e=>{e.preventDefault();const f=e.target,row={email:f.e.value.trim().toLowerCase(),name:f.n.value.trim(),role:f.r.value,active:true};
     const{error}=await sb.from('members').upsert(row);if(error){toast('Hiba: '+error.message);return}
     const i=MEMBERS.findIndex(x=>x.email===row.email);if(i>=0)MEMBERS[i]=row;else MEMBERS.push(row);f.reset();renderUsers(true);toast('Felvéve: '+row.name+' – most beléphet az „Első belépés” gombbal')};
@@ -431,8 +445,8 @@ function renderCloudBox(){const c=cloudCfg(),box=$('#cloudBox');if(!box||box.con
 }
 
 /* ================= NÉZETEK ================= */
-const views=['keszlet','rendeles','rendelesek','vevok','beallitas','naplo'];
-function curView(){return views.includes(location.hash.slice(1))?location.hash.slice(1):'keszlet'}
+const views=['keszlet','rendeles','rendelesek','vevok','beallitas','naplo','portal'];
+function curView(){if(ME?.role==='customer')return 'portal';const h=location.hash.slice(1);return views.includes(h)&&h!=='portal'&&!(h==='naplo'&&!isAdmin())?h:'keszlet'}
 function route(){const v=curView();views.forEach(x=>$('#v-'+x).classList.toggle('on',x===v));
   document.querySelectorAll('#tabs a[data-v]').forEach(a=>a.classList.toggle('on',a.dataset.v===v));render();window.scrollTo(0,0);if(v==='naplo'&&ME)loadLog()}
 window.addEventListener('hashchange',route);
@@ -456,13 +470,13 @@ function render(){
   $('#plist').innerHTML=list.length?list.map(p=>`<button class="item ${num(p.qty)<=num(p.minQty)?'low':''}" data-p="${esc(p.id)}">${img(p)}<span><h3>${esc(p.name||'Névtelen')}</h3><span class="meta">${[p.sku,p.location&&('Polc: '+p.location),p.price&&ft(num(p.price))].filter(Boolean).map(esc).join(' · ')||esc(p.barcode||'')}</span></span><span class="qty">${fq(num(p.qty))}<small>${esc(p.unit||'db')}</small></span></button>`).join('')
     :(all.length?`<div class="empty">Nincs találat erre: „${esc(q)}”.</div>`:`<div class="empty"><h3>Még üres a raktár</h3>Nyomd meg a „Bevételezés kamerával” gombot, és olvasd be sorban a termékeket. Az ismeretlen vonalkódokhoz rögtön kitöltheted az adatlapot.</div>`);
   const cs=Object.entries(S.customers).map(([id,c])=>({id,...c})).sort((a,b)=>(a.name||'').localeCompare(b.name||'','hu'));
-  $('#clist').innerHTML=cs.length?cs.map(c=>`<button class="item" style="grid-template-columns:minmax(0,1fr) auto" data-c="${esc(c.id)}"><span><h3>${esc(c.name)}</h3><span class="meta">${esc([c.email,c.tax].filter(Boolean).join(' · '))}</span></span><span class="qty">${fq(num(c.discount))}%<small>kedvezmény</small></span></button>`).join(''):`<div class="empty"><h3>Nincs még vevő</h3>Vegyél fel egyet, és állítsd be a kedvezményét.</div>`;
+  $('#clist').innerHTML=cs.length?cs.map(c=>`<button class="item" style="grid-template-columns:minmax(0,1fr) auto" data-c="${esc(c.id)}"><span><h3>${esc(c.name)}${MEMBERS.some(m=>m.customer_id===c.id&&m.active)?' <span class="tag">fiók</span>':''}</h3><span class="meta">${esc([c.email,c.tax].filter(Boolean).join(' · '))}</span></span><span class="qty">${fq(num(c.discount))}%<small>kedvezmény</small></span></button>`).join(''):`<div class="empty"><h3>Nincs még vevő</h3>Vegyél fel egyet, és állítsd be a kedvezményét.</div>`;
   const sel=$('#oCust'),cur=sel.value;
   sel.innerHTML='<option value="">— Válassz vevőt —</option>'+cs.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}${num(c.discount)?' ('+fq(num(c.discount))+'%)':''}</option>`).join('');
   sel.value=cur&&S.customers[cur]?cur:'';
   renderCart();
   const os=Object.entries(S.orders).map(([id,o])=>({id,...o})).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-  $('#olist').innerHTML=os.length?os.map(o=>`<button class="item" style="grid-template-columns:minmax(0,1fr) auto" data-o="${esc(o.id)}"><span><h3>${esc(o.no)} · ${esc(o.customer?.name||'')}</h3><span class="meta">${esc(new Date(o.createdAt).toLocaleString('hu-HU'))} · ${o.items?.length||0} tétel${o.createdBy?.name?' · '+esc(o.createdBy.name):''}</span></span><span class="qty" style="font-size:18px">${ft(num(o.gross))}</span></button>`).join(''):`<div class="empty"><h3>Még nincs rendelés</h3>A Rendelés fülön állíthatsz össze egyet.</div>`;
+  $('#olist').innerHTML=os.length?os.map(o=>`<button class="item" style="grid-template-columns:minmax(0,1fr) auto" data-o="${esc(o.id)}"><span><h3>${esc(o.no)} · ${esc(o.customer?.name||'')}</h3><span class="meta">${esc(new Date(o.createdAt).toLocaleString('hu-HU'))} · ${o.items?.length||0} tétel${isAdmin()&&o.createdBy?.name?' · '+esc(o.createdBy.name):''}</span></span><span class="qty" style="font-size:18px">${ft(num(o.gross))}</span></button>`).join(''):`<div class="empty"><h3>Még nincs rendelés</h3>A Rendelés fülön állíthatsz össze egyet.</div>`;
   const f=$('#setF');if(document.activeElement?.form!==f){const c=cfg();for(const el of f.elements)if(el.name&&c[el.name]!==undefined)el.value=c[el.name]}
   if(curView()==='beallitas'){renderMe();renderUsers();if(isAdmin())renderCloudBox()}
   $('#optBeep').checked=!!opts.beep;
@@ -486,8 +500,8 @@ function showProduct(id){const p=S.products[id];if(!p)return;
   <dt>Eladási ár</dt><dd>${p.price?ft(num(p.price))+' + '+fq(num(p.vat??27))+'% ÁFA':'—'}</dd>${isAdmin()?`<dt>Beszerzési ár</dt><dd>${p.cost?ft(num(p.cost)):'—'}</dd>`:''}
   <dt>Méret (H×Sz×M)</dt><dd>${dims}</dd><dt>Súly</dt><dd>${p.weight?fq(num(p.weight))+' kg':'—'}</dd><dt>Űrtartalom</dt><dd>${p.volume?fq(num(p.volume))+' l':'—'}</dd><dt>Min. készlet</dt><dd>${fq(num(p.minQty))}</dd>${p.note?`<dt>Megjegyzés</dt><dd>${esc(p.note)}</dd>`:''}</dl>
   <div class="row"><button class="btn k" id="edB">Szerkesztés</button><button class="btn ghost" id="toCart">Rendelésbe</button>${p.barcode?'<button class="btn ghost" id="lblB">Címke nyomtatása</button>':''}<button class="btn red adm" id="delB">Törlés</button></div>
-  <h3 style="margin:20px 0 4px">Előzmények</h3><div id="pHist" class="note">Betöltés…</div>`);
-  loadProductHistory(id);
+  ${isAdmin()?'<h3 style="margin:20px 0 4px">Előzmények</h3><div id="pHist" class="note">Betöltés…</div>':''}`);
+  if(isAdmin())loadProductHistory(id);
   $('#lblB')&&($('#lblB').onclick=()=>labelDialog(id));
   $('#pane').querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{const i=$('#adj');i.value=Math.max(0,num(i.value)+num(b.dataset.d))});
   const mv=async s=>{const n=num($('#adj').value);if(!n)return;await adjust(id,s*n,s>0?'Bevételezés':'Kiadás');toast((s>0?'Bevételezve: +':'Kiadva: −')+fq(n));showProduct(id)};
@@ -770,20 +784,22 @@ function editCustomer(id,after){const c=id?{...S.customers[id]}:{discount:0};
   open(`<h2>${id?'Vevő szerkesztése':'Új vevő'}<button class="x" data-close aria-label="Bezár">×</button></h2>
   <form id="cf" class="grid">
     <label class="f full">Név / cégnév *<input class="inp" name="name" value="${esc(c.name||'')}"></label>
-    <label class="f">E-mail<input class="inp" name="email" type="email" value="${esc(c.email||'')}"></label>
+    <label class="f">E-mail (ezzel tud belépni)<input class="inp" name="email" type="email" value="${esc(c.email||'')}"></label>
     <label class="f">Telefon<input class="inp" name="phone" value="${esc(c.phone||'')}"></label>
     <label class="f full">Számlázási cím<input class="inp" name="addr" value="${esc(c.addr||'')}"></label>
     <label class="f">Adószám<input class="inp" name="tax" value="${esc(c.tax||'')}"></label>
     <label class="f">Kedvezmény (%)<input class="inp" name="discount" type="number" inputmode="decimal" step="any" min="0" max="100" value="${esc(c.discount??0)}" ${isAdmin()?'':'disabled'}></label>
-    ${id?`<div class="qrbox full">${qrSvg('RV:'+id)}<div><b>Vevő QR-kódja</b><p class="note" style="margin:4px 0 8px">Rendelésfelvételnél beolvasva magától kiválasztja ezt a vevőt.</p><button type="button" class="btn ghost" id="qrPrint">QR-kártya nyomtatása</button></div></div>`:''}
+    ${id?`<div class="qrbox full">${qrSvg('RV:'+id)}<div><b>Vevő QR-kódja</b><p class="note" style="margin:4px 0 8px">Rendelésfelvételnél beolvasva magától kiválasztja ezt a vevőt.</p><button type="button" class="btn ghost" id="qrPrint">QR-kártya nyomtatása</button></div></div>${custAccessHtml(id,c)}`:''}
     <button class="btn k full" type="submit">Mentés</button>
     ${id?'<button type="button" class="btn red full adm" id="cdel">Vevő törlése</button>':''}
   </form>`);
-  const f=$('#cf');f.onsubmit=e=>{e.preventDefault();if(!f.name.value.trim()){toast('Adj meg nevet');return}
+  const f=$('#cf');f.onsubmit=async e=>{e.preventDefault();if(!f.name.value.trim()){toast('Adj meg nevet');return}
     const d={...c};for(const el of f.elements)if(el.name)d[el.name]=el.name==='discount'?Math.min(100,Math.max(0,num(el.value))):el.value.trim();
     if(!isAdmin())d.discount=num(c.discount);
-    const nid=id||uid('c');put('customers',nid,d);close();toast('Vevő elmentve');after&&after(nid)};
+    const nid=id||uid('c');await put('customers',nid,d);close();
+    toast(d.email?`Vevő elmentve – a(z) ${d.email} címmel be tud lépni az „Első belépés” gombbal`:'Vevő elmentve');refreshMembers();after&&after(nid)};
   $('#qrPrint')&&($('#qrPrint').onclick=()=>printHtml(`<div class="qrcard">${qrSvg('RV:'+id)}<div><div style="font-size:7pt;color:#555">VEVŐ</div><div style="font-size:13pt;font-weight:700;line-height:1.15">${esc(c.name)}</div>${c.addr?`<div style="font-size:8pt;margin-top:2mm">${esc(c.addr)}</div>`:''}<div style="font-size:7pt;color:#555;margin-top:3mm">Rendelésnél olvasd be</div></div></div>`,'@page{size:A4;margin:15mm}'));
+  if(id)bindCustAccess(id,c);
   if(id)$('#cdel').onclick=()=>ask('Vevő törlése',`Törlöd: ${c.name}?`,'Törlés',()=>del('customers',id));
 }
 $('#newC').onclick=()=>editCustomer(null);
@@ -836,7 +852,7 @@ function showOrder(id){const o=S.orders[id];if(!o)return;
   open(`<h2>${esc(o.no)}<button class="x" data-close aria-label="Bezár">×</button></h2>
   <div class="inv">${invHtml(o)}</div>
   <div class="row" style="margin-top:12px"><button class="btn k" id="prInv">Nyomtatás / PDF</button><a class="btn y" href="${esc(mailto)}">E-mail a vevőnek</a><button class="btn ghost" id="cpMail">Szöveg másolása</button></div>
-  ${o.createdBy?.name?`<p class="note">Felvette: <b>${esc(o.createdBy.name)}</b></p>`:''}
+  ${isAdmin()&&o.createdBy?.name?`<p class="note">Felvette: <b>${esc(o.createdBy.name)}</b></p>`:''}
   ${o.customer?.email?`<p class="note">Vevő e-mail: <b>${esc(o.customer.email)}</b></p>`:'<p class="note">A vevőnél nincs megadva e-mail cím.</p>'}
   <button class="btn red adm" id="stornoB" style="margin-top:6px">Rendelés sztornó (készlet visszaírása)</button>`);
   $('#prInv').onclick=()=>printHtml(`<div class="inv">${invHtml(o)}</div>`,'@page{size:A4;margin:12mm}');
@@ -846,6 +862,40 @@ function showOrder(id){const o=S.orders[id];if(!o)return;
     await del('orders',id);toast('Sztornózva, készlet visszaírva')});
 }
 $('#olist').addEventListener('click',e=>{const b=e.target.closest('[data-o]');if(b)showOrder(b.dataset.o)});
+
+/* ================= VEVŐI FIÓK ================= */
+async function refreshMembers(){const{data}=await sb.from('members').select('*');if(data){MEMBERS=data;render()}}
+const P={c:null,cat:[],orders:[],tab:'prod',cat2:'all'};
+async function loadPortal(){document.body.classList.add('cust');
+  const[a,b,c]=await Promise.all([sb.rpc('my_customer'),sb.rpc('catalog'),sb.rpc('my_orders')]);
+  if(a.error||!a.data){gate(`<h2>A fiókod még nincs vevőhöz rendelve</h2><p class="note">Kérd meg az eladót, hogy kapcsolja össze a fiókodat a céged adataival.</p><button class="btn k" id="gOut">Kijelentkezés</button>`);$('#gOut').onclick=async()=>{await sb.auth.signOut();location.reload()};return}
+  P.c=a.data;P.cat=b.data||[];P.orders=c.data||[];
+  setSync(P.c.name);ungate();if(location.hash.includes('access_token'))history.replaceState(null,'',location.pathname);route();renderPortal()}
+function myPrice(p){return num(p.price)*(1-num(P.c?.discount)/100)}
+function renderPortal(){if(!P.c)return;
+  $('#pName').textContent=P.c.name;$('#pDisc').textContent=num(P.c.discount)?`Az árak tartalmazzák a ${fq(num(P.c.discount))}% kedvezményedet`:'';
+  document.querySelectorAll('#pTabs .chip').forEach(b=>b.classList.toggle('on',b.dataset.t===P.tab));
+  const box=$('#pBody');
+  if(P.tab==='qr'){box.innerHTML=`<div class="pqr">${qrSvg('RV:'+P.c.id)}<b style="font-size:18px">${esc(P.c.name)}</b><span class="note">Mutasd meg az eladónak rendeléskor – beolvasva rögtön a te nevedre veszi fel a rendelést.</span></div>`;return}
+  if(P.tab==='ord'){box.innerHTML=P.orders.length?'<div class="list">'+P.orders.map((o,i)=>`<button class="item" style="grid-template-columns:minmax(0,1fr) auto" data-po="${i}"><span><h3>${esc(o.no)}</h3><span class="meta">${esc(new Date(o.createdAt).toLocaleDateString('hu-HU'))} · ${(o.items||[]).length} tétel</span></span><span class="qty" style="font-size:18px">${ft(num(o.gross))}</span></button>`).join('')+'</div>':'<div class="empty"><h3>Még nincs rendelésed</h3>Itt fognak megjelenni a korábbi rendeléseid.</div>';
+    box.querySelectorAll('[data-po]').forEach(b=>b.onclick=()=>{const o=P.orders[+b.dataset.po];open(`<h2>${esc(o.no)}<button class="x" data-close aria-label="Bezár">×</button></h2><div class="inv">${invHtml(o)}</div><div class="row" style="margin-top:12px"><button class="btn k" id="ppr">Nyomtatás / PDF</button></div>`);$('#ppr').onclick=()=>printHtml(`<div class="inv">${invHtml(o)}</div>`,'@page{size:A4;margin:12mm}')});return}
+  const cats=[...new Set(P.cat.map(p=>p.category).filter(Boolean))].sort();
+  box.innerHTML=`<input class="inp" id="pq" type="search" placeholder="Keresés a termékek között" autocomplete="off" value="${esc(P.q||'')}">
+    <div class="chips" style="margin-top:8px">${[['all','Mind'],...cats.map(c=>[c,c])].map(([k,l])=>`<button class="chip ${P.cat2===k?'on':''}" data-pc="${esc(k)}">${esc(l)}</button>`).join('')}</div><div class="list" id="pList"></div>`;
+  const draw=()=>{const q=(P.q||'').toLowerCase();const L=P.cat.filter(p=>(!q||String(p.name).toLowerCase().includes(q))&&(P.cat2==='all'||p.category===P.cat2));
+    $('#pList').innerHTML=L.length?L.map(p=>{const net=myPrice(p),gross=net*(1+num(p.vat)/100),src=p.image&&(/^https:\/\//.test(p.image)||p.image.startsWith('data:image/'))?p.image:'';
+      return `<div class="item ${num(p.qty)<=0?'low':''}"><span class="thumb">${src?`<img src="${esc(src)}" alt="" loading="lazy">`:'nincs kép'}</span><span><h3>${esc(p.name)}</h3><span class="meta">${p.price?`${num(P.c.discount)?`<span class="old">${esc(ft(num(p.price)))}</span>`:''}<b>${esc(ft(net))}</b> + ÁFA · bruttó ${esc(ft(gross))} / ${esc(p.unit)}`:'Ár: érdeklődj'}</span></span><span class="qty">${num(p.qty)>0?fq(num(p.qty)):'0'}<small>${num(p.qty)>0?esc(p.unit)+' raktáron':'elfogyott'}</small></span></div>`}).join(''):'<div class="empty">Nincs találat.</div>'};
+  draw();$('#pq').oninput=e=>{P.q=e.target.value;draw()};
+  box.querySelectorAll('[data-pc]').forEach(b=>b.onclick=()=>{P.cat2=b.dataset.pc;renderPortal()})}
+$('#pTabs').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(!b)return;P.tab=b.dataset.t;renderPortal()});
+$('#pOut').onclick=async()=>{await sb.auth.signOut();location.reload()};
+function custAccessHtml(id,c){const m=MEMBERS.find(x=>x.customer_id===id);
+  return `<div class="full adm" id="cAcc" style="border-top:1px solid var(--line);padding-top:12px"><b>Vevői fiók</b>
+  ${m?`<p class="note" style="margin:4px 0 8px">Belépés: <b>${esc(m.email)}</b> · ${m.active?'aktív':'letiltva'}</p><button type="button" class="btn ${m.active?'red':'ghost'}" id="cAccT">${m.active?'Hozzáférés letiltása':'Hozzáférés visszaadása'}</button>`
+  :`<p class="note" style="margin:4px 0 0">${c.email?'A fiók mentés után jön létre.':'Adj meg e-mail címet a vevőnek, és azzal automatikusan be tud lépni: látja a QR-kódját, a rendeléseit és a termékeket a saját áraival.'}</p>`}</div>`}
+function bindCustAccess(id,c){if(!isAdmin()||!$('#cAccT'))return;const m=MEMBERS.find(x=>x.customer_id===id);
+  if(m)$('#cAccT').onclick=async()=>{const{error}=await sb.from('members').update({active:!m.active}).eq('email',m.email);if(error){toast(error.message);return}m.active=!m.active;$('#cAcc').outerHTML=custAccessHtml(id,c);bindCustAccess(id,c)};
+}
 
 /* ================= QR, VONALKÓD, NYOMTATÁS ================= */
 function eanCheck(d12){let s=0;for(let i=0;i<12;i++)s+=(+d12[i])*(i%2?3:1);return String((10-s%10)%10)}
@@ -894,9 +944,9 @@ async function loadProductHistory(pid){const box=$('#pHist');
   if(!$('#pHist')||box!==$('#pHist'))return;
   box.innerHTML=error?esc(error.message):data.length?data.map(m=>mvRow(m,false)).join(''):'Még nincs mozgás.'}
 let logSeq=0;
-async function loadLog(){if(!ME)return;
+async function loadLog(){if(!ME||!isAdmin())return;
   if(!$('#nFrom').value)setRange(7);
-  const us=$('#nUser'),cu=us.value;us.innerHTML='<option value="">Mindenki</option>'+MEMBERS.map(m=>`<option value="${esc(m.email)}">${esc(m.name||m.email)}</option>`).join('');us.value=cu;
+  const us=$('#nUser'),cu=us.value;us.innerHTML='<option value="">Mindenki</option>'+MEMBERS.filter(m=>m.role!=='customer').map(m=>`<option value="${esc(m.email)}">${esc(m.name||m.email)}</option>`).join('');us.value=cu;
   const ks=$('#nKind'),ck=ks.value;ks.innerHTML='<option value="">Minden mozgás</option>'+KINDS.map(k=>`<option>${esc(k)}</option>`).join('');ks.value=ck;
   const from=$('#nFrom').value,to=$('#nTo').value,user=us.value,kind=ks.value,pq=$('#nProd').value.trim().toLowerCase();
   const fromIso=new Date(from+'T00:00:00').toISOString(),toIso=new Date(to+'T23:59:59.999').toISOString();

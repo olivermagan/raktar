@@ -960,9 +960,17 @@ $('#pTabs').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if
 $('#pOut').onclick=async()=>{await sb.auth.signOut();location.reload()};
 function custAccessHtml(id,c){const m=MEMBERS.find(x=>x.customer_id===id);
   return `<div class="full adm" id="cAcc" style="border-top:1px solid var(--line);padding-top:12px"><b>Vevői fiók</b>
-  ${m?`<p class="note" style="margin:4px 0 8px">Belépés: <b>${esc(m.email)}</b> · ${m.active?'aktív':'letiltva'}</p><button type="button" class="btn ${m.active?'red':'ghost'}" id="cAccT">${m.active?'Hozzáférés letiltása':'Hozzáférés visszaadása'}</button>`
+  ${m?`<p class="note" style="margin:4px 0 8px">Belépés: <b>${esc(m.email)}</b> · ${m.active?'aktív':'letiltva'}</p>
+  <div class="row" style="margin-bottom:8px"><input class="inp" id="cPw" type="text" autocomplete="off" placeholder="Új jelszó (min. 6 karakter)" style="flex:1 1 180px"><button type="button" class="btn ghost" id="cPwGen">Generál</button><button type="button" class="btn k" id="cPwSet">Jelszó beállítása</button></div>
+  <p class="note" id="cPwMsg" style="margin:0 0 8px">Ha a vevő elfelejtette a jelszavát, vagy még nem lépett be, itt adhatsz neki jelszót. Utána mondd meg neki.</p>
+  <button type="button" class="btn ${m.active?'red':'ghost'}" id="cAccT">${m.active?'Hozzáférés letiltása':'Hozzáférés visszaadása'}</button>`
   :`<p class="note" style="margin:4px 0 0">${c.email?'A fiók mentés után jön létre.':'Adj meg e-mail címet a vevőnek, és azzal automatikusan be tud lépni: látja a QR-kódját, a rendeléseit és a termékeket a saját áraival.'}</p>`}</div>`}
 function bindCustAccess(id,c){if(!isAdmin()||!$('#cAccT'))return;const m=MEMBERS.find(x=>x.customer_id===id);
+  if(m){$('#cPwGen').onclick=()=>{const a='abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';const r=crypto.getRandomValues(new Uint32Array(10));$('#cPw').value=[...r].map(x=>a[x%a.length]).join('')};
+    $('#cPwSet').onclick=async()=>{const pw=$('#cPw').value.trim();if(pw.length<6){toast('A jelszó legalább 6 karakter legyen');return}
+      const b=$('#cPwSet');b.disabled=true;const{data,error}=await sb.rpc('admin_set_password',{target_email:m.email,new_password:pw});b.disabled=false;
+      if(error){toast('Nem sikerült: '+error.message);return}
+      $('#cPwMsg').innerHTML=`Kész – ${esc(m.email)} új jelszava: <b>${esc(pw)}</b>. Add át a vevőnek, ezzel a „Belépés” gombbal be tud lépni.`;toast('Jelszó beállítva')}}
   if(m)$('#cAccT').onclick=async()=>{const{error}=await sb.from('members').update({active:!m.active}).eq('email',m.email);if(error){toast(error.message);return}m.active=!m.active;$('#cAcc').outerHTML=custAccessHtml(id,c);bindCustAccess(id,c)};
 }
 

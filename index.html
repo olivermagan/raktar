@@ -363,12 +363,12 @@ function gateLogin(info){gate(`<h2>Bejelentkezés</h2><p class="note">${esc(info
   <button class="btn k full" style="min-height:54px">Belépés</button>
   <button class="btn ghost" type="button" id="reg">Első belépés</button><button class="btn ghost" type="button" id="forgot">Elfelejtett jelszó</button>
   <div id="lmsg" class="warn full"></div></form>
-  <p class="note" style="margin-top:18px">Első belépés: azzal az e-mail címmel, amit az admin felvett, itt adsz meg magadnak jelszót. Utána a kapott e-mailben meg kell erősítened.</p>`);
+  <p class="note" style="margin-top:18px">Első belépés: írd be azt az e-mail címet, amit az eladó / admin felvett, adj meg egy új jelszót, és nyomd meg az „Első belépés” gombot. Legközelebb már a „Belépés” gombbal lépj be.</p>`);
   const f=$('#lf'),msg=t=>$('#lmsg').textContent=t;
   f.onsubmit=async e=>{e.preventDefault();msg('Belépés…');const{data,error}=await sb.auth.signInWithPassword({email:f.e.value.trim(),password:f.p.value});
     if(error){msg(error.message==='Invalid login credentials'?'Hibás e-mail vagy jelszó':error.message==='Email not confirmed'?'Még nem erősítetted meg az e-mail címed – nézd meg a postafiókod.':error.message);return}msg('');loadCloud(data.session)};
   $('#reg').onclick=async()=>{if(!f.reportValidity())return;msg('…');const{data,error}=await sb.auth.signUp({email:f.e.value.trim(),password:f.p.value,options:{emailRedirectTo:location.origin+location.pathname}});
-    if(error){msg(error.message.includes('already')?'Ez az e-mail már regisztrálva van – lépj be, vagy kérj új jelszót.':error.message);return}
+    if(error){msg(/already/i.test(error.message)?'Ez az e-mail már regisztrálva van – lépj be a „Belépés” gombbal, vagy kérj új jelszót.':/rate limit/i.test(error.message)?'Túl sok próbálkozás – várj pár percet, és próbáld újra.':/password/i.test(error.message)?'A jelszó legalább 6 karakter legyen.':error.message);return}
     if(data.session)loadCloud(data.session);else msg('Elküldtük a megerősítő e-mailt. Kattints a benne lévő linkre, utána itt be tudsz lépni.')};
   $('#forgot').onclick=async()=>{const em=f.e.value.trim();if(!em){msg('Írd be az e-mail címed, aztán nyomd meg újra.');return}
     const{error}=await sb.auth.resetPasswordForEmail(em,{redirectTo:location.origin+location.pathname});msg(error?error.message:'Elküldtük a jelszó-visszaállító e-mailt.')}}

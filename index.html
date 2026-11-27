@@ -474,16 +474,17 @@ function match(p,q){q=q.toLowerCase();return [p.name,p.barcode,p.sku,p.location,
 
 function render(){
   const all=prods();
-  const low=all.filter(p=>num(p.qty)>0&&num(p.qty)<=num(p.minQty)),out=all.filter(p=>num(p.qty)<=0);
+  const isLow=p=>isAdmin()&&num(p.qty)<=num(p.minQty);
+  const low=all.filter(p=>num(p.qty)>0&&isLow(p)),out=all.filter(p=>num(p.qty)<=0);
   const val=all.reduce((s,p)=>s+Math.max(0,num(p.qty))*num((isAdmin()&&p.cost)||p.price),0);
   $('#stats').innerHTML=`<div class="stat"><b>${all.length}</b><small>termék</small></div><div class="stat"><b>${fq(all.reduce((s,p)=>s+Math.max(0,num(p.qty)),0))}</b><small>összes egység</small></div><div class="stat"><b>${ft(val)}</b><small>készletérték</small></div>${isAdmin()?`<div class="stat"><b class="profit">${ft(all.reduce((s,p)=>s+(num(p.cost)&&num(p.price)?Math.max(0,num(p.qty))*(num(p.price)-num(p.cost)):0),0))}</b><small>várható haszon a készleten</small></div>`:''}`;
   const cats=[...new Set(all.map(p=>p.category).filter(Boolean))].sort();
-  const fl=[['all','Mind ('+all.length+')'],['low','Kevés ('+low.length+')'],['out','Elfogyott ('+out.length+')'],...cats.map(c=>['c:'+c,c])];
+  const fl=[['all','Mind ('+all.length+')'],...(isAdmin()?[['low','Kevés ('+low.length+')']]:[]),['out','Elfogyott ('+out.length+')'],...cats.map(c=>['c:'+c,c])];
   $('#filt').innerHTML=fl.map(([k,l])=>`<button class="chip ${filter===k?'on':''}" data-f="${esc(k)}">${esc(l)}</button>`).join('');
   const q=$('#q').value.trim();
   let list=all.filter(p=>!q||match(p,q));
   if(filter==='low')list=list.filter(p=>low.includes(p));else if(filter==='out')list=list.filter(p=>out.includes(p));else if(filter.startsWith('c:'))list=list.filter(p=>p.category===filter.slice(2));
-  $('#plist').innerHTML=list.length?list.map(p=>`<button class="item ${num(p.qty)<=num(p.minQty)?'low':''}" data-p="${esc(p.id)}">${img(p)}<span><h3>${esc(p.name||'Névtelen')}</h3><span class="meta">${[p.sku,p.location&&('Polc: '+p.location),p.price&&ft(num(p.price))].filter(Boolean).map(esc).join(' · ')||esc(p.barcode||'')}${profitOf(p)?` · <span class="profit">haszon ${esc(ft(profitOf(p).u))}</span>`:''}</span></span><span class="qty">${fq(num(p.qty))}<small>${esc(p.unit||'db')}</small></span></button>`).join('')
+  $('#plist').innerHTML=list.length?list.map(p=>`<button class="item ${isLow(p)||num(p.qty)<=0?'low':''}" data-p="${esc(p.id)}">${img(p)}<span><h3>${esc(p.name||'Névtelen')}</h3><span class="meta">${[p.sku,p.location&&('Polc: '+p.location),p.price&&ft(num(p.price))].filter(Boolean).map(esc).join(' · ')||esc(p.barcode||'')}${profitOf(p)?` · <span class="profit">haszon ${esc(ft(profitOf(p).u))}</span>`:''}</span></span><span class="qty">${fq(num(p.qty))}<small>${esc(p.unit||'db')}</small></span></button>`).join('')
     :(all.length?`<div class="empty">Nincs találat erre: „${esc(q)}”.</div>`:`<div class="empty"><h3>Még üres a raktár</h3>Nyomd meg a „Bevételezés kamerával” gombot, és olvasd be sorban a termékeket. Az ismeretlen vonalkódokhoz rögtön kitöltheted az adatlapot.</div>`);
   const cs=Object.entries(S.customers).map(([id,c])=>({id,...c})).sort((a,b)=>(a.name||'').localeCompare(b.name||'','hu'));
   $('#clist').innerHTML=cs.length?cs.map(c=>`<button class="item" style="grid-template-columns:minmax(0,1fr) auto" data-c="${esc(c.id)}"><span><h3>${esc(c.name)}${MEMBERS.some(m=>m.customer_id===c.id&&m.active)?' <span class="tag">fiók</span>':''}</h3><span class="meta">${esc([c.email,c.tax].filter(Boolean).join(' · '))}</span></span><span class="qty">${fq(num(c.discount))}%<small>kedvezmény</small></span></button>`).join(''):`<div class="empty"><h3>Nincs még vevő</h3>Vegyél fel egyet, és állítsd be a kedvezményét.</div>`;
@@ -508,13 +509,13 @@ function ask(title,text,okLabel,fn){open(`<h2>${esc(title)}<button class="x" dat
 function showProduct(id){const p=S.products[id];if(!p)return;
   const dims=[p.l,p.w,p.h].some(num)?`${fq(num(p.l))} × ${fq(num(p.w))} × ${fq(num(p.h))} cm`:'—';
   open(`<h2>${esc(p.name)}<button class="x" data-close aria-label="Bezár">×</button></h2>
-  <div class="photo">${img(p)}<div><div class="big">${fq(num(p.qty))} <span style="font-size:20px">${esc(p.unit||'db')}</span></div>${num(p.qty)<=num(p.minQty)?'<span class="tag">Fogyóban</span>':''}</div></div>
+  <div class="photo">${img(p)}<div><div class="big">${fq(num(p.qty))} <span style="font-size:20px">${esc(p.unit||'db')}</span></div>${isAdmin()&&num(p.qty)<=num(p.minQty)?'<span class="tag">Fogyóban</span>':''}</div></div>
   <h3 style="margin:16px 0 8px">Készletmozgás</h3>
   <div class="step"><button class="btn" data-d="-1">−</button><input class="inp" id="adj" type="number" inputmode="decimal" value="1"><button class="btn" data-d="1">+</button></div>
   <div class="row" style="margin-top:8px"><button class="btn y" id="inB" style="flex:1">+ Bevételezés</button><button class="btn ghost" id="outB" style="flex:1">− Kiadás</button></div>
   <dl class="dl"><dt>Vonalkód</dt><dd>${esc(p.barcode||'—')}</dd><dt>Cikkszám</dt><dd>${esc(p.sku||'—')}</dd><dt>Kategória</dt><dd>${esc(p.category||'—')}</dd><dt>Polc/hely</dt><dd>${esc(p.location||'—')}</dd>
   <dt>Eladási ár</dt><dd>${p.price?ft(num(p.price))+' + '+fq(num(p.vat??27))+'% ÁFA':'—'}</dd>${profitOf(p)?`<dt>Haszon / ${esc(p.unit||'db')}</dt><dd class="profit">${ft(profitOf(p).u)} <span class="note" style="font-weight:400">· árrés ${fq(Math.round(profitOf(p).margin*10)/10)}% · haszonkulcs ${fq(Math.round(profitOf(p).markup*10)/10)}%</span></dd><dt>Haszon a készleten</dt><dd class="profit">${ft(Math.max(0,num(p.qty))*profitOf(p).u)}</dd>`:''}${isAdmin()?`<dt>Beszerzési ár</dt><dd>${p.cost?ft(num(p.cost)):'—'}</dd>`:''}
-  <dt>Méret (H×Sz×M)</dt><dd>${dims}</dd><dt>Súly</dt><dd>${p.weight?fq(num(p.weight))+' kg':'—'}</dd><dt>Űrtartalom</dt><dd>${p.volume?fq(num(p.volume))+' l':'—'}</dd><dt>Min. készlet</dt><dd>${fq(num(p.minQty))}</dd>${p.note?`<dt>Megjegyzés</dt><dd>${esc(p.note)}</dd>`:''}</dl>
+  <dt>Méret (H×Sz×M)</dt><dd>${dims}</dd><dt>Súly</dt><dd>${p.weight?fq(num(p.weight))+' kg':'—'}</dd><dt>Űrtartalom</dt><dd>${p.volume?fq(num(p.volume))+' l':'—'}</dd>${isAdmin()?`<dt>Min. készlet</dt><dd>${fq(num(p.minQty))}</dd>`:''}${p.note?`<dt>Megjegyzés</dt><dd>${esc(p.note)}</dd>`:''}</dl>
   <div class="row"><button class="btn k" id="edB">Szerkesztés</button><button class="btn ghost" id="toCart">Rendelésbe</button>${p.barcode?'<button class="btn ghost" id="lblB">Címke nyomtatása</button>':''}<button class="btn red adm" id="delB">Törlés</button></div>
   ${isAdmin()?'<h3 style="margin:20px 0 4px">Előzmények</h3><div id="pHist" class="note">Betöltés…</div>':''}`);
   if(isAdmin())loadProductHistory(id);
@@ -538,7 +539,7 @@ function editProduct(id,preset={},onSaved){const p=id?{...S.products[id]}:{unit:
     ${F('sku','Cikkszám')}${F('category','Kategória')}
     ${F('location','Polc / hely')}
     <label class="f">Egység<select class="inp" name="unit">${['db','karton','csomag','kg','l','m','pár'].map(u=>`<option ${p.unit===u?'selected':''}>${u}</option>`).join('')}</select></label>
-    ${F('qty','Készlet','number')}${F('minQty','Min. készlet (ez alatt „Fogyóban”)','number')}
+    ${F('qty','Készlet','number')}${isAdmin()?F('minQty','Min. készlet (ez alatt „Fogyóban”)','number'):'<div></div>'}
     ${isAdmin()?F('price','Nettó eladási ár (Ft)','number')+F('cost','Nettó beszerzési ár (Ft)','number')+'<div class="full note" id="pfCalc"></div>':`<label class="f">Nettó eladási ár (Ft)<input class="inp" value="${esc(p.price??'')}" disabled></label><div></div>`}
     <label class="f">ÁFA<select class="inp" name="vat">${[27,18,5,0].map(v=>`<option value="${v}" ${num(p.vat??27)===v?'selected':''}>${v}%</option>`).join('')}</select></label>
     ${F('weight','Súly (kg)','number')}

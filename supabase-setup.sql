@@ -199,6 +199,58 @@ end $$;
 drop trigger if exists customer_sync_member on public.customers;
 create trigger customer_sync_member after insert or update or delete on public.customers for each row execute function public.customer_sync_member();
 
+-- Értékesítés szerepkör és vevői rendelések (4. verzió): a leadott rendeléseket csak admin és értékesítés látja
+alter table public.members drop constraint if exists members_role_check;
+alter table public.members add constraint members_role_check check (role in ('admin','worker','sales','customer'));
+create or replace function public.is_member()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.members where lower(email) = lower(auth.jwt() ->> 'email') and active and role in ('admin','worker','sales'));
+$$;
+create or replace function public.is_seller()
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.members where lower(email) = lower(auth.jwt() ->> 'email') and active and role in ('admin','sales'));
+$$;
+create or replace function public.my_customer_id()
+returns text language sql stable security definer set search_path = public as $$
+  select customer_id from public.members where lower(email) = lower(auth.jwt() ->> 'email') and active and role = 'customer' limit 1;
+$$;
+create table if not exists public.requests (
+  id            text primary key default gen_random_uuid()::text,
+  created_at    timestamptz not null default now(),
+  customer_id   text,
+  customer_name text,
+  created_by    text,
+  items         jsonb not null default '[]',
+  note          text,
+  status        text not null default 'uj' check (status in ('uj','feldolgozva','elutasitva')),
+  order_no      text,
+  handled_by    text,
+  handled_at    timestamptz
+);
+create or replace function public.requests_set()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  new.customer_id := public.my_customer_id();
+  if new.customer_id is null then raise exception 'Csak vevoi fiokbol lehet rendelest leadni'; end if;
+  new.customer_name := (select data ->> 'name' from public.customers where id = new.customer_id);
+  new.created_by := auth.jwt() ->> 'email';
+  new.created_at := now();
+  new.status := 'uj'; new.order_no := null; new.handled_by := null; new.handled_at := null;
+  return new;
+end $$;
+drop trigger if exists requests_set on public.requests;
+create trigger requests_set before insert on public.requests for each row execute function public.requests_set();
+alter table public.requests enable row level security;
+drop policy if exists "olvas" on public.requests;
+drop policy if exists "vevo lead" on public.requests;
+drop policy if exists "ertekesites kezel" on public.requests;
+create policy "olvas" on public.requests for select to authenticated using (public.is_seller() or customer_id = public.my_customer_id());
+create policy "vevo lead" on public.requests for insert to authenticated with check (public.is_customer());
+create policy "ertekesites kezel" on public.requests for update to authenticated using (public.is_seller()) with check (public.is_seller());
+do $$ begin
+  begin alter publication supabase_realtime add table public.requests; exception when others then null; end;
+end $$;
+
 -- >>> ÍRD ÁT A SAJÁT E-MAIL CÍMEDRE ÉS NEVEDRE (te leszel az admin) <<<
 insert into public.members (email, name, role) values ('IDE_AZ_EMAIL_CIMED@pelda.hu', 'Saját Név', 'admin')
 on conflict (email) do update set role = 'admin', active = true;

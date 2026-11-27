@@ -321,7 +321,7 @@ function setSync(t){$('#sync').textContent=t}
 
 /* ================= ADATRÉTEG ================= */
 /* A Supabase-projekt adatai. Ha itt üres, az admin az első indításkor adja meg (a böngésző megjegyzi). */
-const CLOUD={url:'',key:''};
+const CLOUD={url:'https://exxdkfapuwliefmjnikw.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4eGRrZmFwdXdsaWVmbWpuaWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU3NjU4NTUsImV4cCI6MjExMTM0MTg1NX0.rNxjeZM2oAesyZ4zrbbNTJAZ3KlUyWvUhUMaoOmaCPM'};
 let ME=null,MEMBERS=[];
 const isAdmin=()=>ME?.role==='admin';
 function saveLocal(){}

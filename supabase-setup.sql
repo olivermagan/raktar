@@ -280,6 +280,29 @@ end $$;
 revoke execute on function public.admin_set_password(text, text) from anon, public;
 grant execute on function public.admin_set_password(text, text) to authenticated;
 
+-- elutasítás indoklása, vevő saját adatainak módosítása (6. verzió)
+alter table public.requests add column if not exists reason text;
+create or replace function public.my_customer()
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('id', c.id, 'name', c.data ->> 'name', 'discount', coalesce(nullif(c.data ->> 'discount','')::numeric, 0),
+    'addr', c.data ->> 'addr', 'email', c.data ->> 'email', 'tax', c.data ->> 'tax', 'phone', c.data ->> 'phone')
+  from public.customers c join public.members m on m.customer_id = c.id
+  where lower(m.email) = lower(auth.jwt() ->> 'email') and m.active and m.role = 'customer' limit 1;
+$$;
+create or replace function public.update_my_customer(p_name text, p_addr text, p_tax text, p_phone text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare cid text := public.my_customer_id();
+begin
+  if cid is null then raise exception 'Nincs vevoi fiok'; end if;
+  if coalesce(trim(p_name), '') = '' then raise exception 'A cegnev nem lehet ures'; end if;
+  update public.customers set data = data || jsonb_build_object('name', trim(p_name), 'addr', coalesce(trim(p_addr), ''),
+    'tax', coalesce(trim(p_tax), ''), 'phone', coalesce(trim(p_phone), '')), updated_at = now() where id = cid;
+  return public.my_customer();
+end $$;
+revoke execute on function public.update_my_customer(text, text, text, text) from anon, public;
+grant execute on function public.update_my_customer(text, text, text, text) to authenticated;
+revoke execute on function public.my_customer() from anon;
+
 -- >>> ÍRD ÁT A SAJÁT E-MAIL CÍMEDRE ÉS NEVEDRE (te leszel az admin) <<<
 insert into public.members (email, name, role) values ('IDE_AZ_EMAIL_CIMED@pelda.hu', 'Saját Név', 'admin')
 on conflict (email) do update set role = 'admin', active = true;

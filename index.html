@@ -88,8 +88,10 @@ label.f .inp{margin-top:4px;color:var(--ink)}
 .step .inp{text-align:center;font-weight:700;font-size:20px}
 .dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;font-size:15px;margin:12px 0}
 .dl dt{color:var(--mut)}.dl dd{margin:0;font-weight:600;overflow-wrap:anywhere}
-.line{display:grid;grid-template-columns:minmax(0,1fr) 120px 96px;gap:8px;align-items:center;border-bottom:1px solid var(--line);padding:10px 0}
-.line .step{grid-template-columns:36px minmax(0,1fr) 36px;gap:4px}
+.line{display:grid;grid-template-columns:minmax(0,1fr) 164px 110px;gap:8px;align-items:center;border-bottom:1px solid var(--line);padding:10px 0}
+.line .step{grid-template-columns:40px minmax(72px,1fr) 40px;gap:4px}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield;appearance:textfield}
 .line .step .btn{min-height:40px;padding:0}
 .line .step .inp{min-height:40px;padding:4px;font-size:16px}
 .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -143,12 +145,24 @@ label.f .inp{margin-top:4px;color:var(--ink)}
 body.worker .adm{display:none!important}
 body:not(.seller) .sel{display:none!important}
 body.cust .tabs,body.cust .toplink,body.cust .adm{display:none!important}
-body.cust{padding-bottom:24px}
+body.cust{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+body.cust .ptabs{display:grid!important}
+.ptabs{display:none}
+.ptabs button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;font-size:12px;font-weight:600;color:var(--mut);min-height:58px;justify-content:center;position:relative}
+.ptabs button.on{color:var(--ink);box-shadow:inset 0 4px 0 var(--y)}
+.ptabs svg{width:24px;height:24px}
+.ptabs .bdg{position:absolute;top:4px;left:calc(50% + 6px);background:var(--y);color:#121212;border-radius:99px;font-size:11px;font-weight:800;padding:0 6px;min-width:18px;line-height:18px}
+.ptabs .bdg.red{background:var(--red);color:#fff}
 .pqr{display:grid;place-items:center;gap:10px;padding:18px;border:2px solid var(--ink);border-radius:16px;text-align:center;margin:12px 0}
 .pqr svg{width:min(70vw,280px);height:auto;background:#fff;border-radius:8px}
 .pstep{display:inline-grid;grid-template-columns:44px 52px 44px;align-items:center;text-align:center;gap:4px}.pstep .btn{min-height:40px;padding:0;font-size:20px}.pstep b{font:800 18px Archivo,sans-serif}
 .pbtn{min-height:40px;padding:4px 16px}
 .pitem{grid-template-columns:64px minmax(0,1fr)}
+.tag.red{background:var(--red);color:#fff}.tag.grn{background:var(--grn);color:#fff}
+.palert{border-radius:12px;padding:12px 14px;margin:10px 0;display:grid;gap:8px;font-weight:600}
+.palert.rej{background:light-dark(#fde8e8,#3a1717);border:2px solid var(--red)}
+.palert.acc{background:light-dark(#e6f5ec,#123222);border:2px solid var(--grn)}
+.palert .btn{justify-self:start;min-height:38px;padding:4px 14px}
 .old{text-decoration:line-through;color:var(--mut);font-weight:400;margin-right:6px}
 .mv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;padding:10px 0;border-bottom:1px solid var(--line)}
 .mv b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -173,7 +187,7 @@ body.cust{padding-bottom:24px}
   .lbl-a4 .lbl{width:70mm;height:37mm;padding:3mm}
   .qrcard{width:85mm;height:55mm;border:0.3mm solid #999;border-radius:3mm;display:grid;grid-template-columns:38mm 1fr;gap:3mm;align-items:center;padding:4mm;box-sizing:border-box;font-family:Arial,sans-serif;color:#000}
   .qrcard svg{width:38mm;height:38mm}}
-@media(max-width:600px){.grid3{grid-template-columns:repeat(2,minmax(0,1fr))}.line{grid-template-columns:minmax(0,1fr) 112px}.line .num{grid-column:2}.stat small{font-size:12px}.top .sync{display:none}}
+@media(max-width:600px){.grid3{grid-template-columns:repeat(2,minmax(0,1fr))}.line{grid-template-columns:minmax(0,1fr) 164px}.line .num{grid-column:2}.stat small{font-size:12px}.top .sync{display:none}}
 @media(prefers-reduced-motion:no-preference){.pane{animation:up .18s ease-out}@keyframes up{from{transform:translateY(30px);opacity:.4}}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -231,8 +245,9 @@ body.cust{padding-bottom:24px}
   </section>
 
   <section class="view" id="v-portal">
-    <div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 id="pName" style="font-size:26px"></h2><span class="note" id="pDisc"></span></div><button class="btn ghost" id="pOut">Kilépés</button></div>
-    <div class="chips" id="pTabs" style="margin:14px 0 6px"><button class="chip on" data-t="prod">Termékek</button><button class="chip" data-t="ord">Rendeléseim</button><button class="chip" data-t="qr">QR-kódom</button></div>
+    <div><h2 id="pName" style="font-size:26px"></h2><span class="note" id="pDisc"></span></div>
+    <div id="pAlert"></div>
+    <nav class="tabs ptabs" id="pTabs"></nav>
     <div id="pBody"></div>
   </section>
 
@@ -885,8 +900,10 @@ $('#olist').addEventListener('click',e=>{const b=e.target.closest('[data-o]');if
 
 /* ================= VEVŐI FIÓK ================= */
 async function refreshMembers(){const{data}=await sb.from('members').select('*');if(data){MEMBERS=data;render()}}
-const P={c:null,cat:[],orders:[],reqs:[],tab:'prod',cat2:'all',cart:LS.get('raktar-pcart',[])};
-const RSTAT={uj:['Beküldve – feldolgozásra vár','tag'],feldolgozva:['Elfogadva','tag'],elutasitva:['Elutasítva','tag']};
+const P={c:null,cat:[],orders:[],reqs:[],tab:'prod',cat2:'all',cart:LS.get('raktar-pcart',[]),seen:LS.get('raktar-seenreq',[])};
+function unseen(){return P.reqs.filter(r=>r.status!=='uj'&&!P.seen.includes(r.id))}
+function markSeen(ids){P.seen=[...new Set([...P.seen,...ids])].slice(-300);LS.set('raktar-seenreq',P.seen)}
+const RSTAT={uj:['Beküldve – feldolgozásra vár','tag'],feldolgozva:['Elfogadva','tag'],elutasitva:['Visszautasítva','tag red']};
 async function loadPortal(){document.body.classList.add('cust');
   const[a,b,c,d]=await Promise.all([sb.rpc('my_customer'),sb.rpc('catalog'),sb.rpc('my_orders'),sb.from('requests').select('*').order('created_at',{ascending:false})]);
   if(a.error||!a.data){gate(`<h2>A fiókod még nincs vevőhöz rendelve</h2><p class="note">Kérd meg az eladót, hogy kapcsolja össze a fiókodat a céged adataival.</p><button class="btn k" id="gOut">Kijelentkezés</button>`);$('#gOut').onclick=async()=>{await sb.auth.signOut();location.reload()};return}
@@ -895,7 +912,7 @@ async function loadPortal(){document.body.classList.add('cust');
   setSync(P.c.name);ungate();if(location.hash.includes('access_token'))history.replaceState(null,'',location.pathname);route();renderPortal();
   if(!loadPortal.sub)loadPortal.sub=sb.channel('vevo').on('postgres_changes',{event:'UPDATE',schema:'public',table:'requests'},async p=>{
     const i=P.reqs.findIndex(r=>r.id===p.new.id);if(i<0)return;const was=P.reqs[i].status;P.reqs[i]=p.new;
-    if(was!==p.new.status){toast(p.new.status==='feldolgozva'?'A rendelésedet elfogadták':'A rendelésed állapota megváltozott');const r=await sb.rpc('my_orders');if(r.data)P.orders=r.data;const k=await sb.rpc('catalog');if(k.data)P.cat=k.data}
+    if(was!==p.new.status){toast(p.new.status==='feldolgozva'?'A rendelésedet elfogadták':p.new.status==='elutasitva'?'A leadott rendelésedet visszautasították':'A rendelésed állapota megváltozott');const r=await sb.rpc('my_orders');if(r.data)P.orders=r.data;const k=await sb.rpc('catalog');if(k.data)P.cat=k.data}
     renderPortal()}).subscribe()}
 function myPrice(p){return num(p.price)*(1-num(P.c?.discount)/100)}
 function pSaveCart(){LS.set('raktar-pcart',P.cart)}
@@ -906,25 +923,38 @@ function pImg(p){const src=p.image&&(/^https:\/\//.test(p.image)||p.image.starts
 function pStep(id){const q=pCartQty(id);return q?`<span class="pstep"><button class="btn" data-pd="${esc(id)}" aria-label="Kevesebb">−</button><b>${fq(q)}</b><button class="btn" data-pi="${esc(id)}" aria-label="Több">+</button></span>`:`<button class="btn y pbtn" data-pi="${esc(id)}">Kosárba</button>`}
 function renderPortal(){if(!P.c)return;
   $('#pName').textContent=P.c.name;$('#pDisc').textContent=num(P.c.discount)?`Az árak tartalmazzák a ${fq(num(P.c.discount))}% kedvezményedet`:'';
-  const n=P.cart.reduce((s,l)=>s+l.qty,0);
-  $('#pTabs').innerHTML=[['prod','Termékek'],['cart',`Kosár${n?' ('+fq(n)+')':''}`],['ord','Rendeléseim'],['qr','QR-kódom'],['acc','Fiókom']].map(([k,l])=>`<button class="chip ${P.tab===k?'on':''}" data-t="${k}">${esc(l)}</button>`).join('');
+  const n=P.cart.reduce((s,l)=>s+l.qty,0),U=unseen();
+  $('#pAlert').innerHTML=U.map(r=>{const d=esc(new Date(r.created_at).toLocaleString('hu-HU',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}));
+    return r.status==='elutasitva'?`<div class="palert rej"><span>❗ A ${d}-kor leadott rendelésedet visszautasították.${r.reason?`<br><span style="font-weight:400">Indoklás: ${esc(r.reason)}</span>`:''}</span><button class="btn ghost" data-seen="${esc(r.id)}">Rendben</button></div>`
+      :`<div class="palert acc"><span>✓ A ${d}-kor leadott rendelésedet elfogadták${r.order_no?' ('+esc(r.order_no)+')':''}.</span><button class="btn ghost" data-seen="${esc(r.id)}">Rendben</button></div>`}).join('');
+  $('#pAlert').querySelectorAll('[data-seen]').forEach(b=>b.onclick=()=>{markSeen([b.dataset.seen]);renderPortal()});
+  const PIC={"prod": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1.5\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1.5\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1.5\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1.5\"/></svg>", "cart": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M3 4h2l2.5 11h11L21 7H7\"/><circle cx=\"9\" cy=\"19\" r=\"1.6\"/><circle cx=\"17\" cy=\"19\" r=\"1.6\"/></svg>", "ord": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M6 3h9l4 4v14H6z\"/><path d=\"M9 11h7M9 15h7\"/></svg>", "qr": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\"/><path d=\"M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3\"/></svg>", "acc": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"8\" r=\"4\"/><path d=\"M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8\"/></svg>"};const rej=U.some(r=>r.status==='elutasitva');
+  $('#pTabs').innerHTML=[['prod','Termékek',''],['cart','Kosár',n?`<span class="bdg">${fq(n)}</span>`:''],['ord','Rendeléseim',U.length?`<span class="bdg ${rej?'red':''}">${rej?'!':U.length}</span>`:''],['qr','QR-kód',''],['acc','Fiókom','']].map(([k,l,b])=>`<button class="${P.tab===k?'on':''}" data-t="${k}" aria-label="${l}">${PIC[k]}${l}${b}</button>`).join('');
   const box=$('#pBody');
   if(P.tab==='qr'){box.innerHTML=`<div class="pqr">${qrSvg('RV:'+P.c.id)}<b style="font-size:18px">${esc(P.c.name)}</b><span class="note">Mutasd meg az eladónak rendeléskor – beolvasva rögtön a te nevedre veszi fel a rendelést.</span></div>`;return}
-  if(P.tab==='acc'){box.innerHTML=`<dl class="dl"><dt>Belépési e-mail</dt><dd>${esc(ME.email)}</dd><dt>Cégnév</dt><dd>${esc(P.c.name)}</dd><dt>Cím</dt><dd>${esc(P.c.addr||'—')}</dd><dt>Adószám</dt><dd>${esc(P.c.tax||'—')}</dd><dt>Kedvezmény</dt><dd>${fq(num(P.c.discount))}%</dd></dl>
-    <p class="note">A cégadatok módosítását az eladótól kérd.</p>
+  if(P.tab==='acc'){box.innerHTML=`<dl class="dl"><dt>Belépési e-mail</dt><dd>${esc(ME.email)}</dd><dt>Kedvezmény</dt><dd>${fq(num(P.c.discount))}%</dd></dl>
+    <h3 style="margin:16px 0 8px">Cégadatok</h3>
+    <form id="cdF" class="grid"><label class="f full">Cégnév *<input class="inp" name="n" required value="${esc(P.c.name||'')}"></label>
+    <label class="f full">Számlázási cím<input class="inp" name="a" value="${esc(P.c.addr||'')}"></label>
+    <label class="f">Adószám<input class="inp" name="t" value="${esc(P.c.tax||'')}"></label><label class="f">Telefon<input class="inp" name="p" type="tel" value="${esc(P.c.phone||'')}"></label>
+    <button class="btn k full">Cégadatok mentése</button><div id="cdM" class="warn full"></div></form>
+    <p class="note">A belépési e-mail címed és a kedvezményed módosítását az eladótól kérd.</p>
     <h3 style="margin:20px 0 8px">Jelszó módosítása</h3>
     <form id="pwF" class="grid"><label class="f">Új jelszó<input class="inp" name="a" type="password" minlength="6" required autocomplete="new-password"></label><label class="f">Új jelszó újra<input class="inp" name="b" type="password" minlength="6" required autocomplete="new-password"></label><button class="btn k full">Jelszó mentése</button><div id="pwM" class="warn full"></div></form>
     <button class="btn ghost" id="pOut2" style="margin-top:20px">Kijelentkezés</button>`;
+    $('#cdF').onsubmit=async e=>{e.preventDefault();const f=e.target,b=f.querySelector('button');b.disabled=true;
+      const{data,error}=await sb.rpc('update_my_customer',{p_name:f.n.value,p_addr:f.a.value,p_tax:f.t.value,p_phone:f.p.value});b.disabled=false;
+      if(error){$('#cdM').textContent=error.message;return}if(data)P.c=data;$('#cdM').textContent='';toast('Cégadatok elmentve');renderPortal()};
     $('#pwF').onsubmit=async e=>{e.preventDefault();const f=e.target;if(f.a.value!==f.b.value){$('#pwM').textContent='A két jelszó nem egyezik.';return}
       const{error}=await sb.auth.updateUser({password:f.a.value});if(error){$('#pwM').textContent=/different/i.test(error.message)?'Az új jelszó nem lehet ugyanaz, mint a régi.':error.message;return}f.reset();$('#pwM').textContent='';toast('Jelszó megváltoztatva')};
     $('#pOut2').onclick=async()=>{await sb.auth.signOut();location.reload()};return}
   if(P.tab==='ord'){
     const rq=P.reqs.map((r,i)=>{const st=RSTAT[r.status]||[r.status];const tot=(r.items||[]).reduce((s,x)=>s+num(x.unitNet)*num(x.qty)*(1+num(x.vat)/100),0);
-      return `<button class="item" style="grid-template-columns:minmax(0,1fr) auto" data-pr="${i}"><span><h3>${esc(new Date(r.created_at).toLocaleString('hu-HU',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}))} · ${(r.items||[]).length} tétel</h3><span class="meta">${r.status==='uj'?'<span class="tag">Beküldve</span>':r.status==='feldolgozva'?'Elfogadva'+(r.order_no?' · '+esc(r.order_no):''):'Elutasítva'}</span></span><span class="qty" style="font-size:18px">~${ft(tot)}</span></button>`}).join('');
+      return `<button class="item" style="grid-template-columns:minmax(0,1fr) auto" data-pr="${i}"><span><h3>${esc(new Date(r.created_at).toLocaleString('hu-HU',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}))} · ${(r.items||[]).length} tétel</h3><span class="meta">${r.status==='uj'?'<span class="tag">Beküldve</span>':r.status==='feldolgozva'?'<span class="tag grn">Elfogadva</span>'+(r.order_no?' · '+esc(r.order_no):''):'<span class="tag red">Visszautasítva</span>'+(r.reason?' · '+esc(r.reason):'')}</span></span><span class="qty" style="font-size:18px">~${ft(tot)}</span></button>`}).join('');
     const od=P.orders.map((o,i)=>`<button class="item" style="grid-template-columns:minmax(0,1fr) auto" data-po="${i}"><span><h3>${esc(o.no)}</h3><span class="meta">${esc(new Date(o.createdAt).toLocaleDateString('hu-HU'))} · ${(o.items||[]).length} tétel</span></span><span class="qty" style="font-size:18px">${ft(num(o.gross))}</span></button>`).join('');
     box.innerHTML=(rq?`<h3 style="margin:6px 0">Leadott rendeléseim</h3><div class="list">${rq}</div>`:'')+(od?`<h3 style="margin:18px 0 6px">Visszaigazolt rendelések</h3><div class="list">${od}</div>`:'')+(!rq&&!od?'<div class="empty"><h3>Még nincs rendelésed</h3>A Termékek fülön tehetsz a kosárba, a Kosár fülön adhatod le.</div>':'');
     box.querySelectorAll('[data-po]').forEach(b=>b.onclick=()=>{const o=P.orders[+b.dataset.po];open(`<h2>${esc(o.no)}<button class="x" data-close aria-label="Bezár">×</button></h2><div class="inv">${invHtml(o)}</div><div class="row" style="margin-top:12px"><button class="btn k" id="ppr">Nyomtatás / PDF</button></div>`);$('#ppr').onclick=()=>printHtml(`<div class="inv">${invHtml(o)}</div>`,'@page{size:A4;margin:12mm}')});
-    box.querySelectorAll('[data-pr]').forEach(b=>b.onclick=()=>{const r=P.reqs[+b.dataset.pr];open(`<h2>Leadott rendelés<button class="x" data-close aria-label="Bezár">×</button></h2><p class="note">${esc(new Date(r.created_at).toLocaleString('hu-HU'))} · ${esc((RSTAT[r.status]||[r.status])[0])}${r.order_no?' · '+esc(r.order_no):''}</p>${reqLines(r)}${r.note?`<p><b>Megjegyzés:</b> ${esc(r.note)}</p>`:''}<p class="note">A végleges árat és mennyiséget a visszaigazolás tartalmazza.</p>`)});
+    box.querySelectorAll('[data-pr]').forEach(b=>b.onclick=()=>{const r=P.reqs[+b.dataset.pr];if(r.status!=='uj'&&!P.seen.includes(r.id)){markSeen([r.id]);setTimeout(renderPortal,0)}open(`<h2>Leadott rendelés<button class="x" data-close aria-label="Bezár">×</button></h2><p class="note">${esc(new Date(r.created_at).toLocaleString('hu-HU'))} · ${r.status==='elutasitva'?'<span class="tag red">Visszautasítva</span>':esc((RSTAT[r.status]||[r.status])[0])}${r.order_no?' · '+esc(r.order_no):''}</p>${r.status==='elutasitva'&&r.reason?`<p class="warn">Indoklás: ${esc(r.reason)}</p>`:''}${reqLines(r)}${r.note?`<p><b>Megjegyzés:</b> ${esc(r.note)}</p>`:''}<p class="note">A végleges árat és mennyiséget a visszaigazolás tartalmazza.</p>`)});
     return}
   if(P.tab==='cart'){const L=P.cart.map(l=>({l,p:P.cat.find(x=>x.id===l.id)})).filter(x=>x.p);
     if(!L.length){box.innerHTML='<div class="empty"><h3>Üres a kosarad</h3>A Termékek fülön a „Kosárba” gombbal válogathatsz.</div>';return}
@@ -943,7 +973,7 @@ function renderPortal(){if(!P.c)return;
   const cats=[...new Set(P.cat.map(p=>p.category).filter(Boolean))].sort();
   box.innerHTML=`<input class="inp" id="pq" type="search" placeholder="Keresés a termékek között" autocomplete="off" value="${esc(P.q||'')}">
     <div class="chips" style="margin-top:8px">${[['all','Mind'],...cats.map(c=>[c,c])].map(([k,l])=>`<button class="chip ${P.cat2===k?'on':''}" data-pc="${esc(k)}">${esc(l)}</button>`).join('')}</div><div class="list" id="pList"></div>
-    ${n?`<button class="btn k" id="pGo" style="position:sticky;bottom:12px;width:100%;min-height:54px;margin-top:12px;box-shadow:0 6px 20px #0004">Kosár (${fq(n)}) – tovább a leadáshoz</button>`:''}`;
+    ${n?`<button class="btn k" id="pGo" style="position:sticky;bottom:calc(76px + env(safe-area-inset-bottom));width:100%;min-height:54px;margin-top:12px;box-shadow:0 6px 20px #0004">Kosár (${fq(n)}) – tovább a leadáshoz</button>`:''}`;
   const draw=()=>{const q=(P.q||'').toLowerCase();const L=P.cat.filter(p=>(!q||String(p.name).toLowerCase().includes(q))&&(P.cat2==='all'||p.category===P.cat2));
     $('#pList').innerHTML=L.length?L.map(p=>{const net=myPrice(p),gross=net*(1+num(p.vat)/100);
       return `<div class="item pitem ${num(p.qty)<=0?'low':''}">${pImg(p)}<span><h3>${esc(p.name)}</h3><span class="meta">${p.price?`${num(P.c.discount)?`<span class="old">${esc(ft(num(p.price)))}</span>`:''}<b>${esc(ft(net))}</b> + ÁFA · bruttó ${esc(ft(gross))} / ${esc(p.unit)}`:'Ár: érdeklődj'}</span>
@@ -957,7 +987,7 @@ function bindSteps(root){root.querySelectorAll('[data-pi]').forEach(b=>b.onclick
 function refreshProdUI(){const y=window.scrollY,q=P.q;renderPortal();window.scrollTo(0,y);const i=$('#pq');if(i&&document.activeElement!==i)i.value=q||''}
 function reqLines(r){return `<div>${(r.items||[]).map(x=>`<div class="line" style="grid-template-columns:minmax(0,1fr) auto"><div><b>${esc(x.name)}</b><span class="meta">${esc(ft(num(x.unitNet)))} + ÁFA / ${esc(x.unit||'db')}</span></div><div class="num"><b>${fq(num(x.qty))} ${esc(x.unit||'db')}</b></div></div>`).join('')}</div>`}
 $('#pTabs').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(!b)return;P.tab=b.dataset.t;renderPortal();window.scrollTo(0,0)});
-$('#pOut').onclick=async()=>{await sb.auth.signOut();location.reload()};
+
 function custAccessHtml(id,c){const m=MEMBERS.find(x=>x.customer_id===id);
   return `<div class="full adm" id="cAcc" style="border-top:1px solid var(--line);padding-top:12px"><b>Vevői fiók</b>
   ${m?`<p class="note" style="margin:4px 0 8px">Belépés: <b>${esc(m.email)}</b> · ${m.active?'aktív':'letiltva'}</p>
@@ -991,15 +1021,18 @@ function showRequest(id){const r=REQS.find(x=>x.id===id);if(!r)return;
   <p class="note">Leadva: ${esc(new Date(r.created_at).toLocaleString('hu-HU'))} · ${esc(r.created_by||'')}</p>${rows}
   ${r.note?`<p><b>Megjegyzés:</b> ${esc(r.note)}</p>`:''}
   ${r.status==='uj'?`<div class="row" style="margin-top:12px"><button class="btn k" id="rAcc" style="flex:1">Átvétel rendelésbe</button><button class="btn red" id="rRej">Elutasítás</button></div><p class="note">Az „Átvétel” betölti a tételeket a Rendelés fülre: ott még módosíthatod a mennyiségeket, és a lezárással vonódik le a készlet.</p>`
-   :`<p class="note">${r.status==='feldolgozva'?'Feldolgozva':'Elutasítva'}${r.order_no?' · '+esc(r.order_no):''}${r.handled_by?' · '+esc(r.handled_by):''}${r.handled_at?' · '+esc(new Date(r.handled_at).toLocaleString('hu-HU')):''}</p>`}`);
+   :`<p class="note">${r.status==='feldolgozva'?'Feldolgozva':'Elutasítva'+(r.reason?' – '+esc(r.reason):'')}${r.order_no?' · '+esc(r.order_no):''}${r.handled_by?' · '+esc(r.handled_by):''}${r.handled_at?' · '+esc(new Date(r.handled_at).toLocaleString('hu-HU')):''}</p>`}`);
   if(r.status!=='uj')return;
   $('#rAcc').onclick=()=>{if(!S.customers[r.customer_id]){toast('Ez a vevő már nincs meg a vevők között');return}
     cart=(r.items||[]).filter(x=>S.products[x.pid]).map(x=>({pid:x.pid,qty:num(x.qty)}));LS.set('raktar-cart',cart);
     CUR_REQ={id:r.id,cid:r.customer_id,name:r.customer_name};LS.set('raktar-curreq',CUR_REQ);
     close();location.hash='rendeles';setTimeout(()=>{$('#oCust').value=r.customer_id;renderCart()},50);toast('Ellenőrizd a tételeket, és zárd le a rendelést')};
-  $('#rRej').onclick=()=>ask('Elutasítás',`Elutasítod ${r.customer_name||'a vevő'} rendelését? A vevő látni fogja az elutasítást.`,'Elutasítás',async()=>{
-    const{error}=await sb.from('requests').update({status:'elutasitva',handled_by:ME.name,handled_at:new Date().toISOString()}).eq('id',r.id);
-    if(error){toast(error.message);return}Object.assign(r,{status:'elutasitva',handled_by:ME.name});renderRequests();renderReqBadge();toast('Elutasítva')})}
+  $('#rRej').onclick=()=>{open(`<h2>Elutasítás<button class="x" data-close aria-label="Bezár">×</button></h2><p>Elutasítod ${esc(r.customer_name||'a vevő')} rendelését? A vevő a fiókjában piros jelzést kap róla.</p>
+    <label class="f">Indoklás a vevőnek (nem kötelező)<textarea class="inp" id="rReason" rows="2" placeholder="pl. jelenleg nincs készleten, jövő héten érkezik"></textarea></label>
+    <div class="row" style="margin-top:10px"><button class="btn red" id="rRejOk">Elutasítás</button><button class="btn ghost" data-close>Mégse</button></div>`);
+    $('#rRejOk').onclick=async()=>{const reason=$('#rReason').value.trim()||null;
+      const{error}=await sb.from('requests').update({status:'elutasitva',reason,handled_by:ME.name,handled_at:new Date().toISOString()}).eq('id',r.id);
+      if(error){toast(error.message);return}Object.assign(r,{status:'elutasitva',reason,handled_by:ME.name});close();renderRequests();renderReqBadge();toast('Elutasítva – a vevő értesítést kap')}}}
 function renderReqBanner(){const b=$('#reqBanner');if(!b)return;
   if(CUR_REQ){b.style.display='';b.innerHTML=`Vevői rendelés feldolgozása: <b>${esc(CUR_REQ.name||'')}</b> <button class="btn ghost" id="reqCancel" style="min-height:34px;padding:2px 10px;margin-left:8px">Mégse</button>`;
     $('#reqCancel').onclick=()=>{CUR_REQ=null;LS.set('raktar-curreq',null);cart=[];LS.set('raktar-cart',cart);renderCart();renderReqBanner()}}else{b.style.display='none'}}
